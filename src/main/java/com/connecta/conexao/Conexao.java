@@ -6,15 +6,21 @@ import java.sql.SQLException;
 
 public class Conexao {
 	
-	private static final String url= "jdbc:mysql://localhost:3306/data_basero";
-	private static final String user = "root";
-	private static final String password = "rdyBt9c$ssLnr5SMbKewf$oVt4S#Q&DVMPS@U29Hopp0QPHG13";
-	public static final String JWT_SECRET = "c10nnectaP1menta_b@ckend_secret_key_2026_complex_string_!";
+	// Agora as variáveis buscam os valores do ambiente do sistema
+	private static final String url = System.getenv("DB_URL");
+	private static final String user = System.getenv("DB_USER");
+	private static final String password = System.getenv("DB_PASSWORD");
+	public static final String JWT_SECRET = System.getenv("JWT_SECRET");
 	
 	public static Connection getConnection() {
         try {
-           
             Class.forName("com.mysql.cj.jdbc.Driver");
+            
+            // Uma boa prática é checar se as variáveis foram carregadas
+            if (url == null || user == null || password == null) {
+                System.err.println("ERRO: Variáveis de ambiente do banco de dados não configuradas!");
+                return null;
+            }
             
             return DriverManager.getConnection(url, user, password);
             
