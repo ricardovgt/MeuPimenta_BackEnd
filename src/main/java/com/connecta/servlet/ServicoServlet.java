@@ -8,6 +8,8 @@ import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
+import com.connecta.dto.ServicoCardDTO;
+import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Servico;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
@@ -36,19 +38,17 @@ public class ServicoServlet extends HttpServlet {
             if (idParam != null && !idParam.trim().isEmpty()) {
                 try {
                     int id = Integer.parseInt(idParam);
-                    Servico servico = ServicoDAO.pegarServico(id); // O método que corrigimos antes!
+                    ServicoDetalheDTO servico = ServicoDAO.pegarServicoDetalhe(id);
                     
                     if (servico != null) {
                         String json = new Gson().toJson(servico);
                         res.setStatus(HttpServletResponse.SC_OK);
                         res.getWriter().print(json);
                     } else {
-                        // Se não achou o serviço no banco (retornou null)
                         res.setStatus(HttpServletResponse.SC_NOT_FOUND); // Status 404
                         res.getWriter().print("{\"erro\": \"Serviço não encontrado.\"}");
                     }
                 } catch (NumberFormatException e) {
-                    // Se o cara passar letras no lugar do ID (ex: ?id=abc)
                     res.setStatus(HttpServletResponse.SC_BAD_REQUEST); // Status 400
                     res.getWriter().print("{\"erro\": \"ID inválido.\"}");
                 }
@@ -59,8 +59,7 @@ public class ServicoServlet extends HttpServlet {
                 String topParam = req.getParameter("top");
                 boolean topAvaliacoes = topParam != null && topParam.equalsIgnoreCase("true");
                 
-                List<Servico> servicos = ServicoDAO.buscarServicos(bairro, topAvaliacoes);
-                
+                List<ServicoCardDTO> servicos = ServicoDAO.buscarServicosCard(bairro, topAvaliacoes);
                 String json = new Gson().toJson(servicos);
                 res.setStatus(HttpServletResponse.SC_OK);
                 res.getWriter().print(json);

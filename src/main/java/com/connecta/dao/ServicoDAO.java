@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.connecta.conexao.Conexao;
+import com.connecta.dto.ServicoCardDTO;
+import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Servico;
 
 public class ServicoDAO {
@@ -34,79 +36,81 @@ public class ServicoDAO {
 	    return false;
 	}
 
-    public static List<Servico> buscarServicos(String bairro, boolean topAvaliacoes) {
-        List<Servico> lista = new ArrayList<>();
-        
-        // Uso do 1=1 facilita a adição dinâmica de cláusulas AND
-        StringBuilder sql = new StringBuilder("SELECT * FROM servicos WHERE 1=1");
-        
+    public static List<ServicoCardDTO> buscarServicosCard(String bairro, boolean topAvaliacoes) {
+        List<ServicoCardDTO> lista = new ArrayList<>();
+
+        StringBuilder sql = new StringBuilder(
+            "SELECT s.id, s.nome, s.descricao, s.foto_url, s.bairro, " +
+            "u.nome AS nome_usuario " +
+            "FROM servicos s JOIN usuarios u ON s.id_usuario = u.id WHERE 1=1"
+        );
+
         if (bairro != null && !bairro.trim().isEmpty()) {
-            sql.append(" AND bairro = ?");
+            sql.append(" AND s.bairro = ?");
         }
-        
         if (topAvaliacoes) {
-            sql.append(" ORDER BY avaliacao_media DESC");
+            sql.append(" ORDER BY s.avaliacao_media DESC");
         }
 
-        try (Connection conn = Conexao.getConnection(); 
+        try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql.toString())) {
-             
+
             int paramIndex = 1;
             if (bairro != null && !bairro.trim().isEmpty()) {
                 prepare.setString(paramIndex++, bairro.trim());
             }
-            
-            try (ResultSet result = prepare.executeQuery()) {
-                while (result.next()) {
-                    Servico servico = new Servico();
-                    servico.setId(result.getInt("id"));
-                    servico.setIdUsuario(result.getInt("id_usuario"));
-                    servico.setNome(result.getString("nome"));
-                    servico.setDescricao(result.getString("descricao"));
-                    servico.setTelefone(result.getString("telefone"));
-                    servico.setBairro(result.getString("bairro"));
-                    servico.setFotoUrl(result.getString("foto_url"));
-                    servico.setAvaliacaoMedia(result.getDouble("avaliacao_media"));
-                    servico.setDescricaoDetalhada(result.getString("descricao_detalhada"));
-                    servico.setTotalAvaliacoes(result.getInt("total_avaliacoes"));
-                    lista.add(servico);
+
+            try (ResultSet r = prepare.executeQuery()) {
+                while (r.next()) {
+                    lista.add(new ServicoCardDTO(
+                        r.getInt("id"),
+                        r.getString("nome"),
+                        r.getString("descricao"),
+                        r.getString("foto_url"),
+                        r.getString("bairro"),
+                        r.getString("nome_usuario")
+                    ));
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
         return lista;
     }
     
-    public static Servico pegarServico(int idServico) {
-    	String sql = "SELECT * FROM servicos WHERE id = ? ";
-    	
-    	 try (Connection conn = Conexao.getConnection(); 
-                PreparedStatement prepare = conn.prepareStatement(sql)) {
-    		 	prepare.setInt(1, idServico);
-                
-                try (ResultSet result = prepare.executeQuery()) {
-                    if (result.next()) {
-                        Servico servico = new Servico();
-                        servico.setId(result.getInt("id"));
-                        servico.setIdUsuario(result.getInt("id_usuario"));
-                        servico.setNome(result.getString("nome"));
-                        servico.setDescricao(result.getString("descricao"));
-                        servico.setTelefone(result.getString("telefone"));
-                        servico.setBairro(result.getString("bairro"));
-                        servico.setFotoUrl(result.getString("foto_url"));
-                        servico.setAvaliacaoMedia(result.getDouble("avaliacao_media"));
-                        servico.setDescricaoDetalhada(result.getString("descricao_detalhada"));
-                        servico.setTotalAvaliacoes(result.getInt("total_avaliacoes"));
-                        return servico;
-                    }
+    public static ServicoDetalheDTO pegarServicoDetalhe(int idServico) {
+        String sql =
+            "SELECT s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, s.bairro, " +
+            "s.foto_url, s.avaliacao_media, s.total_avaliacoes, " +
+            "u.id AS id_usuario, u.nome AS nome_usuario " +
+            "FROM servicos s JOIN usuarios u ON s.id_usuario = u.id " +
+            "WHERE s.id = ?";
+
+        try (Connection conn = Conexao.getConnection();
+             PreparedStatement prepare = conn.prepareStatement(sql)) {
+
+            prepare.setInt(1, idServico);
+
+            try (ResultSet r = prepare.executeQuery()) {
+                if (r.next()) {
+                    return new ServicoDetalheDTO(
+                        r.getInt("id"),
+                        r.getString("nome"),
+                        r.getString("descricao"),
+                        r.getString("descricao_detalhada"),
+                        r.getString("telefone"),
+                        r.getString("bairro"),
+                        r.getString("foto_url"),
+                        r.getDouble("avaliacao_media"),
+                        r.getInt("total_avaliacoes"),
+                        r.getInt("id_usuario"),
+                        r.getString("nome_usuario")
+                    );
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                
             }
-    	 return null;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
-    
 }

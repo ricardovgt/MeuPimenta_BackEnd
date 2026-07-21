@@ -10,8 +10,8 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import com.connecta.dao.AvaliacaoDAO;
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
+import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Avaliacao;
-import com.connecta.entity.Servico;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
 
@@ -115,7 +115,7 @@ public class AvaliacaoServlet extends HttpServlet {
             }
 
             // Confirma que o serviço existe antes de tentar avaliar
-            Servico servico = ServicoDAO.pegarServico(idServico);
+            ServicoDetalheDTO servico = ServicoDAO.pegarServicoDetalhe(idServico);
             if (servico == null) {
                 res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 res.getWriter().print("{\"erro\": \"Serviço não encontrado.\"}");
