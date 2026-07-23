@@ -3,9 +3,6 @@ package com.connecta.servlet;
 import java.io.IOException;
 import java.util.List;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.ServicoCardDTO;
@@ -31,10 +28,9 @@ public class ServicoServlet extends HttpServlet {
         res.setCharacterEncoding("UTF-8");
         
         try {
-            // Tenta pegar o ID na URL
             String idParam = req.getParameter("id");
             
-            // LÓGICA 1: BUSCAR UM ÚNICO SERVIÇO (Se o ID foi passado)
+            // LÓGICA 1: BUSCAR UM ÚNICO SERVIÇO
             if (idParam != null && !idParam.trim().isEmpty()) {
                 try {
                     int id = Integer.parseInt(idParam);
@@ -45,15 +41,15 @@ public class ServicoServlet extends HttpServlet {
                         res.setStatus(HttpServletResponse.SC_OK);
                         res.getWriter().print(json);
                     } else {
-                        res.setStatus(HttpServletResponse.SC_NOT_FOUND); // Status 404
+                        res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                         res.getWriter().print("{\"erro\": \"Serviço não encontrado.\"}");
                     }
                 } catch (NumberFormatException e) {
-                    res.setStatus(HttpServletResponse.SC_BAD_REQUEST); // Status 400
+                    res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     res.getWriter().print("{\"erro\": \"ID inválido.\"}");
                 }
             } 
-            // LÓGICA 2: BUSCAR LISTA DE SERVIÇOS (Se o ID não foi passado)
+            // LÓGICA 2: BUSCAR LISTA DE SERVIÇOS
             else {
                 String bairro = req.getParameter("bairro");
                 String topParam = req.getParameter("top");
@@ -78,21 +74,9 @@ public class ServicoServlet extends HttpServlet {
         res.setContentType("application/json");
         res.setCharacterEncoding("UTF-8");
 
-        String authHeader = req.getHeader("Authorization");
-
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            res.getWriter().print("{\"erro\": \"Autenticação necessária.\"}");
-            return;
-        }
-
         try {
-            String token = authHeader.substring(7);
-            Algorithm algoritmo = Algorithm.HMAC256(com.connecta.conexao.Conexao.JWT_SECRET);
-            DecodedJWT jwt = JWT.require(algoritmo).withIssuer("connecta-api").build().verify(token);
-
-            String emailDoToken = jwt.getClaim("email").asString();
-            int idDoToken = jwt.getClaim("id").asInt();
+            int idDoToken = (int) req.getAttribute("idUsuarioToken");
+            String emailDoToken = (String) req.getAttribute("emailUsuarioToken");
             
             // Verifica se o usuário existe e se é COMERCIAL
             Usuario usuarioReq = UsuarioDAO.buscarPorEmail(emailDoToken);
@@ -113,7 +97,7 @@ public class ServicoServlet extends HttpServlet {
             String descricao = req.getParameter("descricao");
             String telefone = req.getParameter("telefone");
             String bairro = req.getParameter("bairro");
-            String fotoUrl = req.getParameter("fotoUrl"); // Pode ser nulo
+            String fotoUrl = req.getParameter("fotoUrl");
             String descricaoDetalhada = req.getParameter("descricaoDetalhada");
             
             if (nome == null || telefone == null || bairro == null || 
@@ -140,9 +124,6 @@ public class ServicoServlet extends HttpServlet {
                 res.getWriter().print("{\"erro\": \"Falha ao salvar o serviço no banco de dados.\"}");
             }
 
-        } catch (com.auth0.jwt.exceptions.JWTVerificationException e) {
-            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            res.getWriter().print("{\"erro\": \"Token inválido ou expirado.\"}");
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

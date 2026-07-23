@@ -16,7 +16,6 @@ public class Conexao {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
             
-            // Uma boa prática é checar se as variáveis foram carregadas
             if (url == null || user == null || password == null) {
                 System.err.println("ERRO: Variáveis de ambiente do banco de dados não configuradas!");
                 return null;

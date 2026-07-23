@@ -9,21 +9,22 @@ import com.connecta.entity.Usuario;
 
 public class UsuarioDAO {
 	
-    public static void cadastrar(Usuario usuario) {
-        String sql = "INSERT INTO usuarios(nome, email, senha) VALUES (?, ?, ?)";
-        
-        try (Connection conn = Conexao.getConnection(); 
-             PreparedStatement prepare = conn.prepareStatement(sql)) {
-             
-            prepare.setString(1, usuario.getNome());
-            prepare.setString(2, usuario.getEmail());
-            prepare.setString(3, usuario.getSenha());
-            prepare.execute();
-            
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
+	public static void cadastrar(Usuario usuario) {
+	    String sql = "INSERT INTO usuarios(nome, email, senha, tipo_conta) VALUES (?, ?, ?, ?)";
+	    
+	    try (Connection conn = Conexao.getConnection(); 
+	         PreparedStatement prepare = conn.prepareStatement(sql)) {
+	         
+	        prepare.setString(1, usuario.getNome());
+	        prepare.setString(2, usuario.getEmail());
+	        prepare.setString(3, usuario.getSenha());
+	        prepare.setString(4, usuario.getTipoConta());
+	        prepare.execute();
+	        
+	    } catch (SQLException e) {
+	        e.printStackTrace();
+	    }
+	}
     
     public static Usuario buscarPorEmail(String email) {
     	String sql = "SELECT id, nome, email, senha, tipo_conta FROM usuarios WHERE email = ?";

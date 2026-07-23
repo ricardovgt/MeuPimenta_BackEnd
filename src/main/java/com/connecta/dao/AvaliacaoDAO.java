@@ -5,13 +5,18 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.connecta.conexao.Conexao;
+import com.connecta.dto.AvaliacaoDTO;
 import com.connecta.entity.Avaliacao;
 
 public class AvaliacaoDAO {
+
+    private static final DateTimeFormatter FORMATO_DATA =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     public static boolean usuarioJaAvaliou(int idServico, int idUsuario) {
         String sql = "SELECT 1 FROM avaliacoes WHERE id_servico = ? AND id_usuario = ?";
@@ -32,9 +37,10 @@ public class AvaliacaoDAO {
     }
 
     public static boolean registrar(Avaliacao avaliacao) {
-        String sqlUpsert = "INSERT INTO avaliacoes (id_servico, id_usuario, nota, data_avaliacao) "
-                + "VALUES (?, ?, ?, ?) "
-                + "ON DUPLICATE KEY UPDATE nota = VALUES(nota), data_avaliacao = VALUES(data_avaliacao)";
+        String sqlUpsert = "INSERT INTO avaliacoes (id_servico, id_usuario, nota, comentario, data_avaliacao) "
+                + "VALUES (?, ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE nota = VALUES(nota), comentario = VALUES(comentario), "
+                + "data_avaliacao = VALUES(data_avaliacao)";
         String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_servico = ?";
         String sqlUpdate = "UPDATE servicos SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
 
@@ -48,7 +54,8 @@ public class AvaliacaoDAO {
                 psUpsert.setInt(1, avaliacao.getIdServico());
                 psUpsert.setInt(2, avaliacao.getIdUsuario());
                 psUpsert.setDouble(3, avaliacao.getNota());
-                psUpsert.setObject(4, avaliacao.getDataAvaliacao() != null ? avaliacao.getDataAvaliacao() : LocalDateTime.now());
+                psUpsert.setString(4, avaliacao.getComentario());
+                psUpsert.setObject(5, avaliacao.getDataAvaliacao() != null ? avaliacao.getDataAvaliacao() : LocalDateTime.now());
                 psUpsert.executeUpdate();
             }
 
@@ -97,24 +104,47 @@ public class AvaliacaoDAO {
         }
     }
 
-    public static List<Avaliacao> listarPorServico(int idServico) {
-        List<Avaliacao> lista = new ArrayList<>();
-        String sql = "SELECT * FROM avaliacoes WHERE id_servico = ? ORDER BY data_avaliacao DESC";
+    /**
+     * Retorna a lista paginada de avaliacoes (com nome do autor) para um servico,
+     * ordenada da mais recente para a mais antiga.
+     */
+    public static List<AvaliacaoDTO> listarPorServicoPaginado(int idServico, int pagina, int limite) {
+        List<AvaliacaoDTO> lista = new ArrayList<>();
+
+        int paginaSegura = Math.max(pagina, 1);
+        int limiteSeguro = Math.max(limite, 1);
+        int offset = (paginaSegura - 1) * limiteSeguro;
+
+        String sql = "SELECT a.id, a.nota, a.comentario, a.data_avaliacao, "
+                + "u.id AS id_usuario, u.nome AS nome_usuario "
+                + "FROM avaliacoes a "
+                + "JOIN usuarios u ON a.id_usuario = u.id "
+                + "WHERE a.id_servico = ? "
+                + "ORDER BY a.data_avaliacao DESC "
+                + "LIMIT ? OFFSET ?";
 
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql)) {
 
             prepare.setInt(1, idServico);
+            prepare.setInt(2, limiteSeguro);
+            prepare.setInt(3, offset);
 
             try (ResultSet result = prepare.executeQuery()) {
                 while (result.next()) {
-                    Avaliacao avaliacao = new Avaliacao();
-                    avaliacao.setId(result.getInt("id"));
-                    avaliacao.setIdServico(result.getInt("id_servico"));
-                    avaliacao.setIdUsuario(result.getInt("id_usuario"));
-                    avaliacao.setNota(result.getDouble("nota"));
-                    avaliacao.setDataAvaliacao(result.getTimestamp("data_avaliacao").toLocalDateTime());
-                    lista.add(avaliacao);
+                    int id = result.getInt("id");
+                    double nota = result.getDouble("nota");
+                    String comentario = result.getString("comentario");
+
+                    java.sql.Timestamp timestamp = result.getTimestamp("data_avaliacao");
+                    String dataFormatada = (timestamp != null)
+                            ? timestamp.toLocalDateTime().format(FORMATO_DATA)
+                            : null;
+
+                    int idUsuario = result.getInt("id_usuario");
+                    String nomeUsuario = result.getString("nome_usuario");
+
+                    lista.add(new AvaliacaoDTO(id, nota, comentario, dataFormatada, idUsuario, nomeUsuario));
                 }
             }
         } catch (SQLException e) {
@@ -122,5 +152,29 @@ public class AvaliacaoDAO {
         }
 
         return lista;
+    }
+
+    /**
+     * Conta o total de avaliacoes cadastradas para um servico, usado para
+     * calcular o total de paginas na rolagem continua.
+     */
+    public static int contarTotalAvaliacoes(int idServico) {
+        String sql = "SELECT COUNT(*) FROM avaliacoes WHERE id_servico = ?";
+
+        try (Connection conn = Conexao.getConnection();
+             PreparedStatement prepare = conn.prepareStatement(sql)) {
+
+            prepare.setInt(1, idServico);
+
+            try (ResultSet result = prepare.executeQuery()) {
+                if (result.next()) {
+                    return result.getInt(1);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return 0;
     }
 }

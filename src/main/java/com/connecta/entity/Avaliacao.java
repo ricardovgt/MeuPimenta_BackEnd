@@ -7,6 +7,7 @@ public class Avaliacao {
     private int idServico;
     private int idUsuario;
     private double nota;
+    private String comentario;
     private LocalDateTime dataAvaliacao;
 
     // Getters
@@ -14,6 +15,7 @@ public class Avaliacao {
     public int getIdServico() { return idServico; }
     public int getIdUsuario() { return idUsuario; }
     public double getNota() { return nota; }
+    public String getComentario() { return comentario; }
     public LocalDateTime getDataAvaliacao() { return dataAvaliacao; }
 
     // Setters
@@ -21,5 +23,6 @@ public class Avaliacao {
     public void setIdServico(int idServico) { this.idServico = idServico; }
     public void setIdUsuario(int idUsuario) { this.idUsuario = idUsuario; }
     public void setNota(double nota) { this.nota = nota; }
+    public void setComentario(String comentario) { this.comentario = comentario; }
     public void setDataAvaliacao(LocalDateTime dataAvaliacao) { this.dataAvaliacao = dataAvaliacao; }
 }

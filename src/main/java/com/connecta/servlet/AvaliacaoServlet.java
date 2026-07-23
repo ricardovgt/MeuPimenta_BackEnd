@@ -4,12 +4,10 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.connecta.dao.AvaliacaoDAO;
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
+import com.connecta.dto.AvaliacaoDTO;
 import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Avaliacao;
 import com.connecta.entity.Usuario;
@@ -25,7 +23,28 @@ import jakarta.servlet.http.HttpServletResponse;
 public class AvaliacaoServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
-    // LISTA AS AVALIAÇÕES DE UM SERVIÇO
+    private static final int LIMITE_PADRAO = 10;
+    private static final int PAGINA_PADRAO = 1;
+
+    // Estrutura auxiliar apenas para serializar a resposta paginada no formato esperado
+    private static class RespostaPaginadaDTO {
+        int paginaAtual;
+        int limite;
+        int totalAvaliacoes;
+        int totalPaginas;
+        List<AvaliacaoDTO> avaliacoes;
+
+        RespostaPaginadaDTO(int paginaAtual, int limite, int totalAvaliacoes,
+                             int totalPaginas, List<AvaliacaoDTO> avaliacoes) {
+            this.paginaAtual = paginaAtual;
+            this.limite = limite;
+            this.totalAvaliacoes = totalAvaliacoes;
+            this.totalPaginas = totalPaginas;
+            this.avaliacoes = avaliacoes;
+        }
+    }
+
+    // LISTA AS AVALIAÇÕES DE UM SERVIÇO, DE FORMA PAGINADA (ROLAGEM CONTÍNUA)
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
@@ -40,16 +59,36 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            int idServico = Integer.parseInt(idServicoParam);
-            List<Avaliacao> avaliacoes = AvaliacaoDAO.listarPorServico(idServico);
+            int idServico;
+            try {
+                idServico = Integer.parseInt(idServicoParam);
+            } catch (NumberFormatException e) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"idServico inválido.\"}");
+                return;
+            }
 
-            String json = new Gson().toJson(avaliacoes);
+            int pagina = lerInteiroOuPadrao(req.getParameter("pagina"), PAGINA_PADRAO);
+            int limite = lerInteiroOuPadrao(req.getParameter("limite"), LIMITE_PADRAO);
+
+            if (pagina < 1) {
+                pagina = PAGINA_PADRAO;
+            }
+            if (limite < 1) {
+                limite = LIMITE_PADRAO;
+            }
+
+            List<AvaliacaoDTO> avaliacoes = AvaliacaoDAO.listarPorServicoPaginado(idServico, pagina, limite);
+            int totalAvaliacoes = AvaliacaoDAO.contarTotalAvaliacoes(idServico);
+            int totalPaginas = (int) Math.ceil(totalAvaliacoes / (double) limite);
+
+            RespostaPaginadaDTO resposta = new RespostaPaginadaDTO(
+                    pagina, limite, totalAvaliacoes, totalPaginas, avaliacoes);
+
+            String json = new Gson().toJson(resposta);
             res.setStatus(HttpServletResponse.SC_OK);
             res.getWriter().print(json);
 
-        } catch (NumberFormatException e) {
-            res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            res.getWriter().print("{\"erro\": \"idServico inválido.\"}");
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -57,28 +96,15 @@ public class AvaliacaoServlet extends HttpServlet {
         }
     }
 
-    // REGISTRA UMA NOVA AVALIAÇÃO (EXIGE TOKEN VÁLIDO)
+    // REGISTRA UMA NOVA AVALIAÇÃO, COM NOTA E COMENTÁRIO OPCIONAL (EXIGE TOKEN VÁLIDO)
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
         res.setCharacterEncoding("UTF-8");
 
-        String authHeader = req.getHeader("Authorization");
-
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            res.getWriter().print("{\"erro\": \"Autenticação necessária.\"}");
-            return;
-        }
-
         try {
-            // Validação real do token (igual ao doPost do ServicoServlet)
-            String token = authHeader.substring(7);
-            Algorithm algoritmo = Algorithm.HMAC256(com.connecta.conexao.Conexao.JWT_SECRET);
-            DecodedJWT jwt = JWT.require(algoritmo).withIssuer("connecta-api").build().verify(token);
-
-            String emailDoToken = jwt.getClaim("email").asString();
-            int idUsuarioToken = jwt.getClaim("id").asInt();
+            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
+            String emailDoToken = (String) req.getAttribute("emailUsuarioToken");
 
             Usuario usuarioReq = UsuarioDAO.buscarPorEmail(emailDoToken);
             if (usuarioReq == null) {
@@ -90,6 +116,7 @@ public class AvaliacaoServlet extends HttpServlet {
             // Coleta e valida os parâmetros
             String idServicoParam = req.getParameter("idServico");
             String notaParam = req.getParameter("nota");
+            String comentarioParam = req.getParameter("comentario");
 
             if (idServicoParam == null || notaParam == null) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -114,6 +141,11 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
+            // Se o usuário enviar apenas a nota, sem texto, o comentário é gravado como null
+            String comentario = (comentarioParam == null || comentarioParam.trim().isEmpty())
+                    ? null
+                    : comentarioParam.trim();
+
             // Confirma que o serviço existe antes de tentar avaliar
             ServicoDetalheDTO servico = ServicoDAO.pegarServicoDetalhe(idServico);
             if (servico == null) {
@@ -122,13 +154,13 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            // Só serve para saber se é criação ou atualização, não bloqueia mais nada
             boolean jaAvaliouAntes = AvaliacaoDAO.usuarioJaAvaliou(idServico, idUsuarioToken);
 
             Avaliacao avaliacao = new Avaliacao();
             avaliacao.setIdServico(idServico);
             avaliacao.setIdUsuario(idUsuarioToken);
             avaliacao.setNota(nota);
+            avaliacao.setComentario(comentario);
             avaliacao.setDataAvaliacao(LocalDateTime.now());
 
             if (AvaliacaoDAO.registrar(avaliacao)) {
@@ -144,13 +176,21 @@ public class AvaliacaoServlet extends HttpServlet {
                 res.getWriter().print("{\"erro\": \"Falha ao salvar avaliação no banco.\"}");
             }
 
-        } catch (com.auth0.jwt.exceptions.JWTVerificationException e) {
-            res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            res.getWriter().print("{\"erro\": \"Token inválido ou expirado.\"}");
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             res.getWriter().print("{\"erro\": \"Erro interno no processamento da avaliação.\"}");
+        }
+    }
+
+    private int lerInteiroOuPadrao(String valor, int padrao) {
+        if (valor == null || valor.trim().isEmpty()) {
+            return padrao;
+        }
+        try {
+            return Integer.parseInt(valor.trim());
+        } catch (NumberFormatException e) {
+            return padrao;
         }
     }
 }
