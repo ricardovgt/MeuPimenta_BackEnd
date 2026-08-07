@@ -25,7 +25,7 @@ public class CorsFilter implements Filter {
 
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             response.setStatus(HttpServletResponse.SC_OK);
-            return; // não deixa cair no servlet
+            return;
         }
         chain.doFilter(req, res);
     }

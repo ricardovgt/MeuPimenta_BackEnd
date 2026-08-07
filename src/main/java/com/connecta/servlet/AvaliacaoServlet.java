@@ -8,6 +8,7 @@ import com.connecta.dao.AvaliacaoDAO;
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.AvaliacaoDTO;
+import com.connecta.dto.RespostaPaginadaDTO;
 import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Avaliacao;
 import com.connecta.entity.Usuario;
@@ -25,24 +26,6 @@ public class AvaliacaoServlet extends HttpServlet {
 
     private static final int LIMITE_PADRAO = 10;
     private static final int PAGINA_PADRAO = 1;
-
-    // Estrutura auxiliar apenas para serializar a resposta paginada no formato esperado
-    private static class RespostaPaginadaDTO {
-        int paginaAtual;
-        int limite;
-        int totalAvaliacoes;
-        int totalPaginas;
-        List<AvaliacaoDTO> avaliacoes;
-
-        RespostaPaginadaDTO(int paginaAtual, int limite, int totalAvaliacoes,
-                             int totalPaginas, List<AvaliacaoDTO> avaliacoes) {
-            this.paginaAtual = paginaAtual;
-            this.limite = limite;
-            this.totalAvaliacoes = totalAvaliacoes;
-            this.totalPaginas = totalPaginas;
-            this.avaliacoes = avaliacoes;
-        }
-    }
 
     // LISTA AS AVALIAÇÕES DE UM SERVIÇO, DE FORMA PAGINADA (ROLAGEM CONTÍNUA)
     @Override

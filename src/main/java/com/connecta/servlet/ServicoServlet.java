@@ -1,10 +1,12 @@
 package com.connecta.servlet;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.List;
 
 import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
+import com.connecta.dto.MeusServicosDTO;
 import com.connecta.dto.ServicoCardDTO;
 import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Servico;
@@ -49,13 +51,28 @@ public class ServicoServlet extends HttpServlet {
                     res.getWriter().print("{\"erro\": \"ID inválido.\"}");
                 }
             } 
-            // LÓGICA 2: BUSCAR LISTA DE SERVIÇOS
+         // LÓGICA 2: "MEUS SERVIÇOS" - LISTA APENAS OS SERVIÇOS DO USUÁRIO LOGADO
+            else if ("true".equalsIgnoreCase(req.getParameter("meus"))) {
+                Object idTokenAttr = req.getAttribute("idUsuarioToken");
+                if (idTokenAttr == null) {
+                    res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    res.getWriter().print("{\"erro\": \"Token inválido ou ausente.\"}");
+                    return;
+                }
+                int idUsuarioToken = (int) idTokenAttr;
+
+                List<MeusServicosDTO> meusServicos = ServicoDAO.listarPorUsuario(idUsuarioToken);
+                String json = new Gson().toJson(meusServicos);
+                res.setStatus(HttpServletResponse.SC_OK);
+                res.getWriter().print(json);
+            }
+            // LÓGICA 3: BUSCAR LISTA DE SERVIÇOS (COM FILTROS)
             else {
-                String bairro = req.getParameter("bairro");
+                String busca = req.getParameter("busca");
                 String topParam = req.getParameter("top");
                 boolean topAvaliacoes = topParam != null && topParam.equalsIgnoreCase("true");
                 
-                List<ServicoCardDTO> servicos = ServicoDAO.buscarServicosCard(bairro, topAvaliacoes);
+                List<ServicoCardDTO> servicos = ServicoDAO.buscarServicosCard(busca, topAvaliacoes);
                 String json = new Gson().toJson(servicos);
                 res.setStatus(HttpServletResponse.SC_OK);
                 res.getWriter().print(json);
@@ -128,6 +145,118 @@ public class ServicoServlet extends HttpServlet {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             res.getWriter().print("{\"erro\": \"Erro interno no processamento do serviço.\"}");
+        }
+    }
+
+    // EDITA UM SERVIÇO EXISTENTE (EXIGE TOKEN E SER O DONO DO SERVIÇO)
+    @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        res.setContentType("application/json");
+        res.setCharacterEncoding("UTF-8");
+
+        try {
+            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
+
+            // Lê o corpo JSON da requisição
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = req.getReader()) {
+                String linha;
+                while ((linha = reader.readLine()) != null) {
+                    sb.append(linha);
+                }
+            }
+
+            Servico servico;
+            try {
+                servico = new Gson().fromJson(sb.toString(), Servico.class);
+            } catch (Exception e) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Corpo da requisição em formato JSON inválido.\"}");
+                return;
+            }
+
+            if (servico == null) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Dados do serviço não informados.\"}");
+                return;
+            }
+
+            // Validação dos campos obrigatórios
+            if (servico.getNome() == null || servico.getNome().trim().isEmpty()
+                    || servico.getTelefone() == null || servico.getTelefone().trim().isEmpty()
+                    || servico.getBairro() == null || servico.getBairro().trim().isEmpty()) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Nome, telefone e bairro são obrigatórios.\"}");
+                return;
+            }
+
+            boolean atualizado = ServicoDAO.atualizar(servico, idUsuarioToken);
+
+            if (atualizado) {
+                res.setStatus(HttpServletResponse.SC_OK);
+                res.getWriter().print("{\"mensagem\": \"Serviço atualizado com sucesso!\"}");
+            } else {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Não foi possível atualizar o serviço. Verifique se ele existe e se você é o dono.\"}");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            res.getWriter().print("{\"erro\": \"Erro interno ao atualizar serviço.\"}");
+        }
+    }
+
+    // EXCLUI UM SERVIÇO, EXIGINDO CONFIRMAÇÃO DO E-MAIL DA CONTA LOGADA
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        res.setContentType("application/json");
+        res.setCharacterEncoding("UTF-8");
+
+        try {
+            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
+            String emailToken = (String) req.getAttribute("emailUsuarioToken");
+
+            String idParam = req.getParameter("id");
+            String emailParam = req.getParameter("email");
+
+            if (idParam == null || idParam.trim().isEmpty()
+                    || emailParam == null || emailParam.trim().isEmpty()) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Os parâmetros id e email são obrigatórios.\"}");
+                return;
+            }
+
+            int idServico;
+            try {
+                idServico = Integer.parseInt(idParam.trim());
+            } catch (NumberFormatException e) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"id inválido.\"}");
+                return;
+            }
+
+            // Regra de segurança: o e-mail informado precisa coincidir com o e-mail do token
+            if (!emailParam.trim().equalsIgnoreCase(emailToken)) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"O e-mail digitado não coincide com o e-mail da sua conta.\"}");
+                return;
+            }
+
+            boolean excluido = ServicoDAO.deletar(idServico, idUsuarioToken);
+
+            if (excluido) {
+                res.setStatus(HttpServletResponse.SC_OK);
+                res.getWriter().print("{\"mensagem\": \"Serviço excluído com sucesso!\"}");
+            } else {
+                res.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                res.getWriter().print("{\"erro\": \"Serviço não encontrado ou você não tem permissão para excluí-lo.\"}");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            res.getWriter().print("{\"erro\": \"Erro interno ao excluir serviço.\"}");
         }
     }
 }

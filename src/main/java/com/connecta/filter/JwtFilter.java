@@ -31,11 +31,11 @@ public class JwtFilter implements Filter {
         // Identifica quais métodos de quais rotas exigem Token JWT
         boolean precisaAutenticacao = false;
 
-        if ("/servicos".equals(path) && "POST".equalsIgnoreCase(method)) {
+        if ("/servicos".equals(path) && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method))) {
             precisaAutenticacao = true;
         } else if ("/avaliacoes".equals(path) && "POST".equalsIgnoreCase(method)) {
             precisaAutenticacao = true;
-        } else if ("/usuario".equals(path) && ("GET".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method))) {
+        } else if ("/usuario".equals(path) && ("GET".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method))) {
             precisaAutenticacao = true;
         }
 
