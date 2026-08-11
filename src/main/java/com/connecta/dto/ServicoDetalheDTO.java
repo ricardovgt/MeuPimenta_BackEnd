@@ -1,17 +1,18 @@
 package com.connecta.dto;
 
+import java.util.List;
+
 public class ServicoDetalheDTO {
     private int id;
     private String nome;
     private String descricao;
     private String descricaoDetalhada;
     private String telefone;
-    private String bairro;
-    private String fotoUrl;
+    private List<FotoServicoDTO> fotos;
     private double avaliacaoMedia;
     private int totalAvaliacoes;
 
-    // NOVOS CAMPOS PARA O GRÁFICO / DISTRIBUIÇÃO DE ESTRELAS
+    // CAMPOS PARA O GRÁFICO / DISTRIBUIÇÃO DE ESTRELAS
     private int total5Estrelas;
     private int total4Estrelas;
     private int total3Estrelas;
@@ -22,7 +23,7 @@ public class ServicoDetalheDTO {
     private String nomeUsuario;
 
     public ServicoDetalheDTO(int id, String nome, String descricao, String descricaoDetalhada,
-                              String telefone, String bairro, String fotoUrl,
+                              String telefone, List<FotoServicoDTO> fotos,
                               double avaliacaoMedia, int totalAvaliacoes,
                               int total5Estrelas, int total4Estrelas, int total3Estrelas,
                               int total2Estrelas, int total1Estrelas,
@@ -32,8 +33,7 @@ public class ServicoDetalheDTO {
         this.descricao = descricao;
         this.descricaoDetalhada = descricaoDetalhada;
         this.telefone = telefone;
-        this.bairro = bairro;
-        this.fotoUrl = fotoUrl;
+        this.fotos = fotos;
         this.avaliacaoMedia = avaliacaoMedia;
         this.totalAvaliacoes = totalAvaliacoes;
         this.total5Estrelas = total5Estrelas;
@@ -51,12 +51,10 @@ public class ServicoDetalheDTO {
     public String getDescricao() { return descricao; }
     public String getDescricaoDetalhada() { return descricaoDetalhada; }
     public String getTelefone() { return telefone; }
-    public String getBairro() { return bairro; }
-    public String getFotoUrl() { return fotoUrl; }
+    public List<FotoServicoDTO> getFotos() { return fotos; }
     public double getAvaliacaoMedia() { return avaliacaoMedia; }
     public int getTotalAvaliacoes() { return totalAvaliacoes; }
 
-    // Novas propriedades expostas no JSON
     public int getTotal5Estrelas() { return total5Estrelas; }
     public int getTotal4Estrelas() { return total4Estrelas; }
     public int getTotal3Estrelas() { return total3Estrelas; }

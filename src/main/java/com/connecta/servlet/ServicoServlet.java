@@ -9,6 +9,7 @@ import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.MeusServicosDTO;
 import com.connecta.dto.ServicoCardDTO;
 import com.connecta.dto.ServicoDetalheDTO;
+import com.connecta.dto.ServicoRequestDTO;
 import com.connecta.entity.Servico;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
@@ -23,7 +24,6 @@ import jakarta.servlet.http.HttpServletResponse;
 public class ServicoServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
-    // RETORNA A LISTA DE SERVIÇOS COM FILTROS
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
@@ -85,7 +85,6 @@ public class ServicoServlet extends HttpServlet {
         }
     }
 
-    // CADASTRA UM NOVO SERVIÇO (EXIGE TOKEN E CONTA COMERCIAL)
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
@@ -95,7 +94,6 @@ public class ServicoServlet extends HttpServlet {
             int idDoToken = (int) req.getAttribute("idUsuarioToken");
             String emailDoToken = (String) req.getAttribute("emailUsuarioToken");
             
-            // Verifica se o usuário existe e se é COMERCIAL
             Usuario usuarioReq = UsuarioDAO.buscarPorEmail(emailDoToken);
             if (usuarioReq == null) {
                 res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -109,18 +107,38 @@ public class ServicoServlet extends HttpServlet {
                 return;
             }
 
-            // Coleta os parâmetros
-            String nome = req.getParameter("nome");
-            String descricao = req.getParameter("descricao");
-            String telefone = req.getParameter("telefone");
-            String bairro = req.getParameter("bairro");
-            String fotoUrl = req.getParameter("fotoUrl");
-            String descricaoDetalhada = req.getParameter("descricaoDetalhada");
-            
-            if (nome == null || telefone == null || bairro == null || 
-                nome.trim().isEmpty() || telefone.trim().isEmpty() || bairro.trim().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = req.getReader()) {
+                String linha;
+                while ((linha = reader.readLine()) != null) {
+                    sb.append(linha);
+                }
+            }
+
+            ServicoRequestDTO dadosRecebidos;
+            try {
+                dadosRecebidos = new Gson().fromJson(sb.toString(), ServicoRequestDTO.class);
+            } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"Nome, telefone e bairro são obrigatórios.\"}");
+                res.getWriter().print("{\"erro\": \"Corpo da requisição em formato JSON inválido.\"}");
+                return;
+            }
+
+            if (dadosRecebidos == null) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Dados do serviço não informados.\"}");
+                return;
+            }
+
+            String nome = dadosRecebidos.getNome();
+            String descricao = dadosRecebidos.getDescricao();
+            String telefone = dadosRecebidos.getTelefone();
+            String descricaoDetalhada = dadosRecebidos.getDescricaoDetalhada();
+
+            if (nome == null || telefone == null || 
+                nome.trim().isEmpty() || telefone.trim().isEmpty()) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"Nome e telefone são obrigatórios.\"}");
                 return;
             }
 
@@ -129,11 +147,9 @@ public class ServicoServlet extends HttpServlet {
             servico.setNome(nome.trim());
             servico.setDescricao(descricao != null ? descricao.trim() : "");
             servico.setTelefone(telefone.trim());
-            servico.setBairro(bairro.trim());
-            servico.setFotoUrl(fotoUrl != null ? fotoUrl.trim() : "");
             servico.setDescricaoDetalhada(descricaoDetalhada != null ? descricaoDetalhada.trim() : "");
             
-            if (ServicoDAO.cadastrar(servico)) {
+            if (ServicoDAO.cadastrar(servico, dadosRecebidos.getFotos())) {
                 res.setStatus(HttpServletResponse.SC_CREATED);
                 res.getWriter().print("{\"mensagem\": \"Serviço cadastrado com sucesso!\"}");
             } else {
@@ -148,7 +164,6 @@ public class ServicoServlet extends HttpServlet {
         }
     }
 
-    // EDITA UM SERVIÇO EXISTENTE (EXIGE TOKEN E SER O DONO DO SERVIÇO)
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
@@ -157,7 +172,6 @@ public class ServicoServlet extends HttpServlet {
         try {
             int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
 
-            // Lê o corpo JSON da requisição
             StringBuilder sb = new StringBuilder();
             try (BufferedReader reader = req.getReader()) {
                 String linha;
@@ -166,31 +180,36 @@ public class ServicoServlet extends HttpServlet {
                 }
             }
 
-            Servico servico;
+            ServicoRequestDTO dadosRecebidos;
             try {
-                servico = new Gson().fromJson(sb.toString(), Servico.class);
+                dadosRecebidos = new Gson().fromJson(sb.toString(), ServicoRequestDTO.class);
             } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"Corpo da requisição em formato JSON inválido.\"}");
                 return;
             }
 
-            if (servico == null) {
+            if (dadosRecebidos == null) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"Dados do serviço não informados.\"}");
                 return;
             }
 
-            // Validação dos campos obrigatórios
-            if (servico.getNome() == null || servico.getNome().trim().isEmpty()
-                    || servico.getTelefone() == null || servico.getTelefone().trim().isEmpty()
-                    || servico.getBairro() == null || servico.getBairro().trim().isEmpty()) {
+            if (dadosRecebidos.getNome() == null || dadosRecebidos.getNome().trim().isEmpty()
+                    || dadosRecebidos.getTelefone() == null || dadosRecebidos.getTelefone().trim().isEmpty()) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"Nome, telefone e bairro são obrigatórios.\"}");
+                res.getWriter().print("{\"erro\": \"Nome e telefone são obrigatórios.\"}");
                 return;
             }
 
-            boolean atualizado = ServicoDAO.atualizar(servico, idUsuarioToken);
+            Servico servico = new Servico();
+            servico.setId(dadosRecebidos.getId());
+            servico.setNome(dadosRecebidos.getNome().trim());
+            servico.setDescricao(dadosRecebidos.getDescricao() != null ? dadosRecebidos.getDescricao().trim() : "");
+            servico.setTelefone(dadosRecebidos.getTelefone().trim());
+            servico.setDescricaoDetalhada(dadosRecebidos.getDescricaoDetalhada() != null ? dadosRecebidos.getDescricaoDetalhada().trim() : "");
+
+            boolean atualizado = ServicoDAO.atualizar(servico, idUsuarioToken, dadosRecebidos.getFotos());
 
             if (atualizado) {
                 res.setStatus(HttpServletResponse.SC_OK);
@@ -207,7 +226,6 @@ public class ServicoServlet extends HttpServlet {
         }
     }
 
-    // EXCLUI UM SERVIÇO, EXIGINDO CONFIRMAÇÃO DO E-MAIL DA CONTA LOGADA
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("application/json");
@@ -236,7 +254,6 @@ public class ServicoServlet extends HttpServlet {
                 return;
             }
 
-            // Regra de segurança: o e-mail informado precisa coincidir com o e-mail do token
             if (!emailParam.trim().equalsIgnoreCase(emailToken)) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"O e-mail digitado não coincide com o e-mail da sua conta.\"}");

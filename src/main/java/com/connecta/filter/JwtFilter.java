@@ -25,6 +25,12 @@ public class JwtFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse res = (HttpServletResponse) response;
 
+        // Garante os headers de CORS mesmo quando este filtro responde direto (401),
+        // sem depender da ordem de execução em relação ao CorsFilter.
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, PUT, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
         String path = req.getServletPath();
         String method = req.getMethod();
 
