@@ -61,7 +61,114 @@ public class ServicoDAO {
 	    }
 	    return false;
 	}
+	
+	public static boolean deletar(int idServico, int idUsuarioDono) {
+        String sql = "DELETE FROM servicos WHERE id = ? AND id_usuario = ?";
 
+        try (Connection conn = Conexao.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, idServico);
+            ps.setInt(2, idUsuarioDono); 
+
+            return ps.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+	
+    //CONSULTAS
+    
+    public static ServicoDetalheDTO pegarServicoDetalhe(int idServico) {
+    String sql =
+        "SELECT s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, " +
+        "s.avaliacao_media, s.total_avaliacoes, " +
+        "u.id AS id_usuario, u.nome AS nome_usuario, u.foto_perfil, " + // <-- Adicionado u.foto_perfil
+        "SUM(CASE WHEN a.nota = 5 THEN 1 ELSE 0 END) AS total_5, " +
+        "SUM(CASE WHEN a.nota = 4 THEN 1 ELSE 0 END) AS total_4, " +
+        "SUM(CASE WHEN a.nota = 3 THEN 1 ELSE 0 END) AS total_3, " +
+        "SUM(CASE WHEN a.nota = 2 THEN 1 ELSE 0 END) AS total_2, " +
+        "SUM(CASE WHEN a.nota = 1 THEN 1 ELSE 0 END) AS total_1 " +
+        "FROM servicos s " +
+        "INNER JOIN usuarios u ON s.id_usuario = u.id " +
+        "LEFT JOIN avaliacoes a ON a.id_servico = s.id " +
+        "WHERE s.id = ? " +
+        "GROUP BY s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, " +
+        "s.avaliacao_media, s.total_avaliacoes, u.id, u.nome, u.foto_perfil"; // <-- Adicionado u.foto_perfil no GROUP BY
+
+    try (Connection conn = Conexao.getConnection();
+         PreparedStatement prepare = conn.prepareStatement(sql)) {
+
+        prepare.setInt(1, idServico);
+
+        try (ResultSet r = prepare.executeQuery()) {
+            if (r.next()) {
+                List<FotoServicoDTO> fotos = FotoServicoDAO.buscarPorServico(idServico);
+
+                return new ServicoDetalheDTO(
+                    r.getInt("id"),
+                    r.getString("nome"),
+                    r.getString("descricao"),
+                    r.getString("descricao_detalhada"),
+                    r.getString("telefone"),
+                    fotos,
+                    r.getDouble("avaliacao_media"),
+                    r.getInt("total_avaliacoes"),
+                    r.getInt("total_5"),
+                    r.getInt("total_4"),
+                    r.getInt("total_3"),
+                    r.getInt("total_2"),
+                    r.getInt("total_1"),
+                    r.getInt("id_usuario"),
+                    r.getString("nome_usuario"),
+                    r.getString("foto_perfil") // <-- Passado aqui para o DTO
+                );
+            }
+        }
+    } catch (SQLException e) {
+        e.printStackTrace();
+    }
+    return null;
+    }
+    
+    public static List<MeusServicosDTO> listarPorUsuario(int idUsuario) {
+        List<MeusServicosDTO> lista = new ArrayList<>();
+
+        String sql =
+            "SELECT s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, " +
+            "f.foto_base64 AS foto_capa, u.nome AS nome_usuario " +
+            "FROM servicos s " +
+            "JOIN usuarios u ON s.id_usuario = u.id " +
+            "LEFT JOIN fotos_servico f ON f.id_servico = s.id AND f.is_capa = TRUE " +
+            "WHERE s.id_usuario = ? " +
+            "ORDER BY s.id DESC";
+
+        try (Connection conn = Conexao.getConnection();
+             PreparedStatement prepare = conn.prepareStatement(sql)) {
+
+            prepare.setInt(1, idUsuario);
+
+            try (ResultSet r = prepare.executeQuery()) {
+                while (r.next()) {
+                    lista.add(new MeusServicosDTO(
+                        r.getInt("id"),
+                        r.getString("nome"),
+                        r.getString("descricao"),
+                        r.getString("descricao_detalhada"),
+                        r.getString("telefone"),
+                        r.getString("foto_capa"),
+                        r.getString("nome_usuario")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return lista;
+    }
+    
     public static List<ServicoCardDTO> buscarServicosCard(String busca, boolean topAvaliacoes) {
         List<ServicoCardDTO> lista = new ArrayList<>();
 
@@ -151,91 +258,7 @@ public class ServicoDAO {
         return lista;
     }
     
-    public static ServicoDetalheDTO pegarServicoDetalhe(int idServico) {
-        String sql =
-            "SELECT s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, " +
-            "s.avaliacao_media, s.total_avaliacoes, " +
-            "u.id AS id_usuario, u.nome AS nome_usuario, " +
-            "COUNT(CASE WHEN ROUND(a.nota) = 5 THEN 1 END) AS total_5, " +
-            "COUNT(CASE WHEN ROUND(a.nota) = 4 THEN 1 END) AS total_4, " +
-            "COUNT(CASE WHEN ROUND(a.nota) = 3 THEN 1 END) AS total_3, " +
-            "COUNT(CASE WHEN ROUND(a.nota) = 2 THEN 1 END) AS total_2, " +
-            "COUNT(CASE WHEN ROUND(a.nota) = 1 THEN 1 END) AS total_1 " +
-            "FROM servicos s " +
-            "JOIN usuarios u ON s.id_usuario = u.id " +
-            "LEFT JOIN avaliacoes a ON a.id_servico = s.id " +
-            "WHERE s.id = ? " +
-            "GROUP BY s.id, u.id";
-
-        try (Connection conn = Conexao.getConnection();
-             PreparedStatement prepare = conn.prepareStatement(sql)) {
-
-            prepare.setInt(1, idServico);
-
-            try (ResultSet r = prepare.executeQuery()) {
-                if (r.next()) {
-                    List<FotoServicoDTO> fotos = FotoServicoDAO.buscarPorServico(idServico);
-
-                    return new ServicoDetalheDTO(
-                        r.getInt("id"),
-                        r.getString("nome"),
-                        r.getString("descricao"),
-                        r.getString("descricao_detalhada"),
-                        r.getString("telefone"),
-                        fotos,
-                        r.getDouble("avaliacao_media"),
-                        r.getInt("total_avaliacoes"),
-                        r.getInt("total_5"),
-                        r.getInt("total_4"),
-                        r.getInt("total_3"),
-                        r.getInt("total_2"),
-                        r.getInt("total_1"),
-                        r.getInt("id_usuario"),
-                        r.getString("nome_usuario")
-                    );
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-    
-    public static List<MeusServicosDTO> listarPorUsuario(int idUsuario) {
-        List<MeusServicosDTO> lista = new ArrayList<>();
-
-        String sql =
-            "SELECT s.id, s.nome, s.descricao, s.descricao_detalhada, s.telefone, " +
-            "f.foto_base64 AS foto_capa, u.nome AS nome_usuario " +
-            "FROM servicos s " +
-            "JOIN usuarios u ON s.id_usuario = u.id " +
-            "LEFT JOIN fotos_servico f ON f.id_servico = s.id AND f.is_capa = TRUE " +
-            "WHERE s.id_usuario = ? " +
-            "ORDER BY s.id DESC";
-
-        try (Connection conn = Conexao.getConnection();
-             PreparedStatement prepare = conn.prepareStatement(sql)) {
-
-            prepare.setInt(1, idUsuario);
-
-            try (ResultSet r = prepare.executeQuery()) {
-                while (r.next()) {
-                    lista.add(new MeusServicosDTO(
-                        r.getInt("id"),
-                        r.getString("nome"),
-                        r.getString("descricao"),
-                        r.getString("descricao_detalhada"),
-                        r.getString("telefone"),
-                        r.getString("foto_capa"),
-                        r.getString("nome_usuario")
-                    ));
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return lista;
-    }
+    //MODIFCAÇÕES DE DADOS
 
     public static boolean atualizar(Servico servico, int idUsuarioDono, List<String> fotosBase64) {
         String sql = "UPDATE servicos SET nome = ?, descricao = ?, telefone = ?, " +
@@ -282,18 +305,14 @@ public class ServicoDAO {
         }
         return false;
     }
-
-    public static boolean deletar(int idServico, int idUsuarioDono) {
-        String sql = "DELETE FROM servicos WHERE id = ? AND id_usuario = ?";
-
+    
+    public static boolean excluirTodosPorUsuario(int idUsuario) {
+        String sql = "DELETE FROM servicos WHERE id_usuario = ?";
         try (Connection conn = Conexao.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setInt(1, idServico);
-            ps.setInt(2, idUsuarioDono); 
-
-            return ps.executeUpdate() > 0;
-
+            ps.setInt(1, idUsuario);
+            ps.executeUpdate();
+            return true;
         } catch (SQLException e) {
             e.printStackTrace();
         }

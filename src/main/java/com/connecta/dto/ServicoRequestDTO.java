@@ -6,7 +6,7 @@ import java.util.List;
 // Não é persistido diretamente - o Servlet usa os dados daqui para montar um Servico
 // e repassa a lista de fotos separadamente para o DAO.
 public class ServicoRequestDTO {
-    private int id; // só é usado na edição (PUT); no cadastro vem 0 e é ignorado
+    private int id;
     private String nome;
     private String descricao;
     private String descricaoDetalhada;

@@ -39,7 +39,7 @@ public class JwtFilter implements Filter {
 
         if ("/servicos".equals(path) && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method))) {
             precisaAutenticacao = true;
-        } else if ("/avaliacoes".equals(path) && "POST".equalsIgnoreCase(method)) {
+        } else if ("/avaliacoes".equals(path) && "POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method)) {
             precisaAutenticacao = true;
         } else if ("/usuario".equals(path) && ("GET".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method))) {
             precisaAutenticacao = true;

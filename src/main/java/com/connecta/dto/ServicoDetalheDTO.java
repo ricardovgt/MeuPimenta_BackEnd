@@ -21,13 +21,14 @@ public class ServicoDetalheDTO {
 
     private int idUsuario;
     private String nomeUsuario;
+    private String fotoPerfilUsuario;
 
     public ServicoDetalheDTO(int id, String nome, String descricao, String descricaoDetalhada,
                               String telefone, List<FotoServicoDTO> fotos,
                               double avaliacaoMedia, int totalAvaliacoes,
                               int total5Estrelas, int total4Estrelas, int total3Estrelas,
                               int total2Estrelas, int total1Estrelas,
-                              int idUsuario, String nomeUsuario) {
+                              int idUsuario, String nomeUsuario, String fotoPerfilUsuario) {
         this.id = id;
         this.nome = nome;
         this.descricao = descricao;
@@ -43,6 +44,7 @@ public class ServicoDetalheDTO {
         this.total1Estrelas = total1Estrelas;
         this.idUsuario = idUsuario;
         this.nomeUsuario = nomeUsuario;
+        this.fotoPerfilUsuario = fotoPerfilUsuario;
     }
 
     // Getters
@@ -63,4 +65,5 @@ public class ServicoDetalheDTO {
 
     public int getIdUsuario() { return idUsuario; }
     public String getNomeUsuario() { return nomeUsuario; }
+    public String getFotoPerfilUsuario() { return fotoPerfilUsuario; }
 }

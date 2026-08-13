@@ -13,6 +13,7 @@ import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Avaliacao;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -137,15 +138,23 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            boolean jaAvaliouAntes = AvaliacaoDAO.usuarioJaAvaliou(idServico, idUsuarioToken);
+            // Impede que o dono do serviço avalie o próprio serviço
+            if (servico.getIdUsuario() == idUsuarioToken) {
+                res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                res.getWriter().print("{\"erro\": \"Você não pode avaliar seu próprio serviço.\"}");
+                return;
+            }
 
+            boolean jaAvaliouAntes = AvaliacaoDAO.usuarioJaAvaliou(idServico, idUsuarioToken);
+            
             Avaliacao avaliacao = new Avaliacao();
             avaliacao.setIdServico(idServico);
             avaliacao.setIdUsuario(idUsuarioToken);
             avaliacao.setNota(nota);
             avaliacao.setComentario(comentario);
             avaliacao.setDataAvaliacao(LocalDateTime.now());
-
+            
+            
             if (AvaliacaoDAO.registrar(avaliacao)) {
                 if (jaAvaliouAntes) {
                     res.setStatus(HttpServletResponse.SC_OK);
@@ -163,6 +172,58 @@ public class AvaliacaoServlet extends HttpServlet {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             res.getWriter().print("{\"erro\": \"Erro interno no processamento da avaliação.\"}");
+        }
+    }
+
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+        res.setContentType("application/json");
+        res.setCharacterEncoding("UTF-8");
+
+        try {
+            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
+            JsonObject json;
+
+            try {
+                json = new Gson().fromJson(req.getReader(), JsonObject.class);
+            } catch (RuntimeException e) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"JSON inválido.\"}");
+                return;
+            }
+
+            if (json == null || !json.has("idAvaliacao") || json.get("idAvaliacao").isJsonNull()) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"O campo idAvaliacao é obrigatório.\"}");
+                return;
+            }
+
+            int idAvaliacao;
+            try {
+                idAvaliacao = json.get("idAvaliacao").getAsInt();
+            } catch (RuntimeException e) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"idAvaliacao inválido.\"}");
+                return;
+            }
+
+            if (idAvaliacao < 1) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"idAvaliacao inválido.\"}");
+                return;
+            }
+
+            if (AvaliacaoDAO.remover(idAvaliacao, idUsuarioToken)) {
+                res.setStatus(HttpServletResponse.SC_OK);
+                res.getWriter().print("{\"mensagem\": \"Avaliação removida com sucesso!\"}");
+            } else {
+                res.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                res.getWriter().print("{\"erro\": \"Avaliação não encontrada.\"}");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            res.getWriter().print("{\"erro\": \"Erro interno ao remover avaliação.\"}");
         }
     }
 
