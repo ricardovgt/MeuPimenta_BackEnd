@@ -9,7 +9,7 @@ import org.mindrot.jbcrypt.BCrypt;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.connecta.dao.ServicoDAO;
+import com.connecta.dao.AnuncioDAO;
 import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.UsuarioRequestDTO;
 import com.connecta.dto.UsuarioResponseDTO;
@@ -140,6 +140,22 @@ public class UsuarioServlet extends HttpServlet {
         try {
             int idDoToken = (int) req.getAttribute("idUsuarioToken");
 
+            Usuario usuarioAtual = UsuarioDAO.buscarPorId(idDoToken);
+
+            if (usuarioAtual == null) {
+                res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                res.getWriter().print("{\"erro\": \"Usuário inválido.\"}");
+                return;
+            }
+
+            if (usuarioAtual.getStatus() != null
+                    && "BANIDO".equalsIgnoreCase(usuarioAtual.getStatus().trim())) {
+                res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                res.getWriter().print(
+                        "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
+                return;
+            }
+
             StringBuilder sb = new StringBuilder();
             BufferedReader reader = req.getReader();
             String linha;
@@ -204,8 +220,8 @@ public class UsuarioServlet extends HttpServlet {
                     return;
                 }
 
-                // Ao trocar o tipo de conta, remove todos os serviços já publicados
-                ServicoDAO.excluirTodosPorUsuario(idDoToken);
+                // Ao trocar o tipo de conta, remove todos os anúncios já publicados
+                AnuncioDAO.excluirTodosPorUsuario(idDoToken);
 
                 boolean atualizado = UsuarioDAO.atualizarTipoConta(idDoToken, tipoNormalizado);
                 if (atualizado) {
@@ -370,7 +386,7 @@ public class UsuarioServlet extends HttpServlet {
                 return;
             }
 
-            ServicoDAO.excluirTodosPorUsuario(idDoToken);
+            AnuncioDAO.excluirTodosPorUsuario(idDoToken);
             boolean contaExcluida = UsuarioDAO.descadastrar(idDoToken);
 
             if (contaExcluida) {

@@ -4,12 +4,12 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.connecta.dao.AnuncioDAO;
 import com.connecta.dao.AvaliacaoDAO;
-import com.connecta.dao.ServicoDAO;
 import com.connecta.dao.UsuarioDAO;
+import com.connecta.dto.AnuncioDetalheDTO;
 import com.connecta.dto.AvaliacaoDTO;
 import com.connecta.dto.RespostaPaginadaDTO;
-import com.connecta.dto.ServicoDetalheDTO;
 import com.connecta.entity.Avaliacao;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
@@ -28,27 +28,31 @@ public class AvaliacaoServlet extends HttpServlet {
     private static final int LIMITE_PADRAO = 10;
     private static final int PAGINA_PADRAO = 1;
 
-    // LISTA AS AVALIAÇÕES DE UM SERVIÇO, DE FORMA PAGINADA (ROLAGEM CONTÍNUA)
+    private final Gson gson = new Gson();
+
+    // LISTA AS AVALIAÇÕES DE UM ANÚNCIO DE FORMA PAGINADA
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+    protected void doGet(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+
+        prepararResposta(res);
 
         try {
-            String idServicoParam = req.getParameter("idServico");
+            String idAnuncioParam = req.getParameter("idAnuncio");
 
-            if (idServicoParam == null || idServicoParam.trim().isEmpty()) {
+            if (idAnuncioParam == null || idAnuncioParam.trim().isEmpty()) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"O parâmetro idServico é obrigatório.\"}");
+                res.getWriter().print(
+                        "{\"erro\": \"O parâmetro idAnuncio é obrigatório.\"}");
                 return;
             }
 
-            int idServico;
+            int idAnuncio;
             try {
-                idServico = Integer.parseInt(idServicoParam);
+                idAnuncio = Integer.parseInt(idAnuncioParam.trim());
             } catch (NumberFormatException e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"idServico inválido.\"}");
+                res.getWriter().print("{\"erro\": \"idAnuncio inválido.\"}");
                 return;
             }
 
@@ -58,20 +62,27 @@ public class AvaliacaoServlet extends HttpServlet {
             if (pagina < 1) {
                 pagina = PAGINA_PADRAO;
             }
+
             if (limite < 1) {
                 limite = LIMITE_PADRAO;
             }
 
-            List<AvaliacaoDTO> avaliacoes = AvaliacaoDAO.listarPorServicoPaginado(idServico, pagina, limite);
-            int totalAvaliacoes = AvaliacaoDAO.contarTotalAvaliacoes(idServico);
+            List<AvaliacaoDTO> avaliacoes =
+                    AvaliacaoDAO.listarPorAnuncioPaginado(idAnuncio, pagina, limite);
+
+            int totalAvaliacoes = AvaliacaoDAO.contarTotalAvaliacoes(idAnuncio);
             int totalPaginas = (int) Math.ceil(totalAvaliacoes / (double) limite);
 
             RespostaPaginadaDTO resposta = new RespostaPaginadaDTO(
-                    pagina, limite, totalAvaliacoes, totalPaginas, avaliacoes);
+                    pagina,
+                    limite,
+                    totalAvaliacoes,
+                    totalPaginas,
+                    avaliacoes
+            );
 
-            String json = new Gson().toJson(resposta);
             res.setStatus(HttpServletResponse.SC_OK);
-            res.getWriter().print(json);
+            res.getWriter().print(gson.toJson(resposta));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -80,42 +91,55 @@ public class AvaliacaoServlet extends HttpServlet {
         }
     }
 
-    // REGISTRA UMA NOVA AVALIAÇÃO, COM NOTA E COMENTÁRIO OPCIONAL (EXIGE TOKEN VÁLIDO)
+    // REGISTRA OU ATUALIZA UMA AVALIAÇÃO
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+    protected void doPost(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+
+        prepararResposta(res);
 
         try {
-            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
-            String emailDoToken = (String) req.getAttribute("emailUsuarioToken");
+            Integer idUsuarioToken = obterIdUsuarioToken(req);
 
-            Usuario usuarioReq = UsuarioDAO.buscarPorEmail(emailDoToken);
+            if (idUsuarioToken == null) {
+                res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                res.getWriter().print("{\"erro\": \"Token inválido ou ausente.\"}");
+                return;
+            }
+
+            Usuario usuarioReq = UsuarioDAO.buscarPorId(idUsuarioToken);
+
             if (usuarioReq == null) {
                 res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 res.getWriter().print("{\"erro\": \"Usuário inválido.\"}");
                 return;
             }
 
-            // Coleta e valida os parâmetros
-            String idServicoParam = req.getParameter("idServico");
-            String notaParam = req.getParameter("nota");
-            String comentarioParam = req.getParameter("comentario");
-
-            if (idServicoParam == null || notaParam == null) {
-                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"idServico e nota são obrigatórios.\"}");
+            if (usuarioEstaBanido(usuarioReq)) {
+                responderContaBanida(res);
                 return;
             }
 
-            int idServico;
+            String idAnuncioParam = req.getParameter("idAnuncio");
+            String notaParam = req.getParameter("nota");
+            String comentarioParam = req.getParameter("comentario");
+
+            if (idAnuncioParam == null || notaParam == null) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"idAnuncio e nota são obrigatórios.\"}");
+                return;
+            }
+
+            int idAnuncio;
             double nota;
+
             try {
-                idServico = Integer.parseInt(idServicoParam);
-                nota = Double.parseDouble(notaParam);
+                idAnuncio = Integer.parseInt(idAnuncioParam.trim());
+                nota = Double.parseDouble(notaParam.trim());
             } catch (NumberFormatException e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"idServico ou nota em formato inválido.\"}");
+                res.getWriter().print(
+                        "{\"erro\": \"idAnuncio ou nota em formato inválido.\"}");
                 return;
             }
 
@@ -125,43 +149,46 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            // Se o usuário enviar apenas a nota, sem texto, o comentário é gravado como null
-            String comentario = (comentarioParam == null || comentarioParam.trim().isEmpty())
-                    ? null
-                    : comentarioParam.trim();
+            String comentario =
+                    (comentarioParam == null || comentarioParam.trim().isEmpty())
+                            ? null
+                            : comentarioParam.trim();
 
-            // Confirma que o serviço existe antes de tentar avaliar
-            ServicoDetalheDTO servico = ServicoDAO.pegarServicoDetalhe(idServico);
-            if (servico == null) {
+            AnuncioDetalheDTO anuncio =
+                    AnuncioDAO.pegarAnuncioDetalhe(idAnuncio, idUsuarioToken);
+
+            if (anuncio == null) {
                 res.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                res.getWriter().print("{\"erro\": \"Serviço não encontrado.\"}");
+                res.getWriter().print("{\"erro\": \"Anúncio não encontrado.\"}");
                 return;
             }
 
-            // Impede que o dono do serviço avalie o próprio serviço
-            if (servico.getIdUsuario() == idUsuarioToken) {
+            if (anuncio.getIdUsuario() == idUsuarioToken) {
                 res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                res.getWriter().print("{\"erro\": \"Você não pode avaliar seu próprio serviço.\"}");
+                res.getWriter().print(
+                        "{\"erro\": \"Você não pode avaliar seu próprio anúncio.\"}");
                 return;
             }
 
-            boolean jaAvaliouAntes = AvaliacaoDAO.usuarioJaAvaliou(idServico, idUsuarioToken);
-            
+            boolean jaAvaliouAntes =
+                    AvaliacaoDAO.usuarioJaAvaliou(idAnuncio, idUsuarioToken);
+
             Avaliacao avaliacao = new Avaliacao();
-            avaliacao.setIdServico(idServico);
+            avaliacao.setIdAnuncio(idAnuncio);
             avaliacao.setIdUsuario(idUsuarioToken);
             avaliacao.setNota(nota);
             avaliacao.setComentario(comentario);
             avaliacao.setDataAvaliacao(LocalDateTime.now());
-            
-            
+
             if (AvaliacaoDAO.registrar(avaliacao)) {
                 if (jaAvaliouAntes) {
                     res.setStatus(HttpServletResponse.SC_OK);
-                    res.getWriter().print("{\"mensagem\": \"Avaliação atualizada com sucesso!\"}");
+                    res.getWriter().print(
+                            "{\"mensagem\": \"Avaliação atualizada com sucesso!\"}");
                 } else {
                     res.setStatus(HttpServletResponse.SC_CREATED);
-                    res.getWriter().print("{\"mensagem\": \"Avaliação registrada com sucesso!\"}");
+                    res.getWriter().print(
+                            "{\"mensagem\": \"Avaliação registrada com sucesso!\"}");
                 }
             } else {
                 res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -171,34 +198,60 @@ public class AvaliacaoServlet extends HttpServlet {
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            res.getWriter().print("{\"erro\": \"Erro interno no processamento da avaliação.\"}");
+            res.getWriter().print(
+                    "{\"erro\": \"Erro interno no processamento da avaliação.\"}");
         }
     }
 
     @Override
-    protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+    protected void doDelete(HttpServletRequest req, HttpServletResponse res)
+            throws ServletException, IOException {
+
+        prepararResposta(res);
 
         try {
-            int idUsuarioToken = (int) req.getAttribute("idUsuarioToken");
+            Integer idUsuarioToken = obterIdUsuarioToken(req);
+
+            if (idUsuarioToken == null) {
+                res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                res.getWriter().print("{\"erro\": \"Token inválido ou ausente.\"}");
+                return;
+            }
+
+            Usuario usuarioReq = UsuarioDAO.buscarPorId(idUsuarioToken);
+
+            if (usuarioReq == null) {
+                res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                res.getWriter().print("{\"erro\": \"Usuário inválido.\"}");
+                return;
+            }
+
+            if (usuarioEstaBanido(usuarioReq)) {
+                responderContaBanida(res);
+                return;
+            }
+
             JsonObject json;
 
             try {
-                json = new Gson().fromJson(req.getReader(), JsonObject.class);
+                json = gson.fromJson(req.getReader(), JsonObject.class);
             } catch (RuntimeException e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"JSON inválido.\"}");
                 return;
             }
 
-            if (json == null || !json.has("idAvaliacao") || json.get("idAvaliacao").isJsonNull()) {
+            if (json == null
+                    || !json.has("idAvaliacao")
+                    || json.get("idAvaliacao").isJsonNull()) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"O campo idAvaliacao é obrigatório.\"}");
+                res.getWriter().print(
+                        "{\"erro\": \"O campo idAvaliacao é obrigatório.\"}");
                 return;
             }
 
             int idAvaliacao;
+
             try {
                 idAvaliacao = json.get("idAvaliacao").getAsInt();
             } catch (RuntimeException e) {
@@ -215,11 +268,13 @@ public class AvaliacaoServlet extends HttpServlet {
 
             if (AvaliacaoDAO.remover(idAvaliacao, idUsuarioToken)) {
                 res.setStatus(HttpServletResponse.SC_OK);
-                res.getWriter().print("{\"mensagem\": \"Avaliação removida com sucesso!\"}");
+                res.getWriter().print(
+                        "{\"mensagem\": \"Avaliação removida com sucesso!\"}");
             } else {
                 res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 res.getWriter().print("{\"erro\": \"Avaliação não encontrada.\"}");
             }
+
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -227,10 +282,37 @@ public class AvaliacaoServlet extends HttpServlet {
         }
     }
 
+    private void prepararResposta(HttpServletResponse res) {
+        res.setContentType("application/json");
+        res.setCharacterEncoding("UTF-8");
+    }
+
+    private Integer obterIdUsuarioToken(HttpServletRequest req) {
+        Object valor = req.getAttribute("idUsuarioToken");
+
+        if (valor instanceof Integer) {
+            return (Integer) valor;
+        }
+
+        return null;
+    }
+
+    private boolean usuarioEstaBanido(Usuario usuario) {
+        return usuario.getStatus() != null
+                && "BANIDO".equalsIgnoreCase(usuario.getStatus().trim());
+    }
+
+    private void responderContaBanida(HttpServletResponse res) throws IOException {
+        res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        res.getWriter().print(
+                "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
+    }
+
     private int lerInteiroOuPadrao(String valor, int padrao) {
         if (valor == null || valor.trim().isEmpty()) {
             return padrao;
         }
+
         try {
             return Integer.parseInt(valor.trim());
         } catch (NumberFormatException e) {

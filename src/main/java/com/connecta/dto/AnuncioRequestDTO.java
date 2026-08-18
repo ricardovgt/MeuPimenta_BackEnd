@@ -3,14 +3,16 @@ package com.connecta.dto;
 import java.util.List;
 
 // Usado apenas para LER o JSON que o front-end manda no cadastro (POST) e na edição (PUT).
-// Não é persistido diretamente - o Servlet usa os dados daqui para montar um Servico
+// Não é persistido diretamente - o Servlet usa os dados daqui para montar um Anuncio
 // e repassa a lista de fotos separadamente para o DAO.
-public class ServicoRequestDTO {
+public class AnuncioRequestDTO {
     private int id;
     private String nome;
     private String descricao;
     private String descricaoDetalhada;
     private String telefone;
+    private String tipo;
+    private String status;
     private List<String> fotos;
 
     // Getters e Setters
@@ -28,6 +30,12 @@ public class ServicoRequestDTO {
 
     public String getTelefone() { return telefone; }
     public void setTelefone(String telefone) { this.telefone = telefone; }
+
+    public String getTipo() { return tipo; }
+    public void setTipo(String tipo) { this.tipo = tipo; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public List<String> getFotos() { return fotos; }
     public void setFotos(List<String> fotos) { this.fotos = fotos; }

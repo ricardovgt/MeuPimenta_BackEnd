@@ -1,11 +1,11 @@
 package com.connecta.dto;
 
-public class FotoServicoDTO {
+public class FotoAnuncioDTO {
     private int id;
     private String fotoBase64;
     private boolean isCapa;
 
-    public FotoServicoDTO(int id, String fotoBase64, boolean isCapa) {
+    public FotoAnuncioDTO(int id, String fotoBase64, boolean isCapa) {
         this.id = id;
         this.fotoBase64 = fotoBase64;
         this.isCapa = isCapa;

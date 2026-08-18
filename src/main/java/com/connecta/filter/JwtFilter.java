@@ -15,7 +15,7 @@ import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-@WebFilter(urlPatterns = {"/servicos", "/avaliacoes", "/usuario"})
+@WebFilter(urlPatterns = {"/anuncios", "/avaliacoes", "/usuario"})
 public class JwtFilter implements Filter {
 
     @Override
@@ -37,7 +37,7 @@ public class JwtFilter implements Filter {
         // Identifica quais métodos de quais rotas exigem Token JWT
         boolean precisaAutenticacao = false;
 
-        if ("/servicos".equals(path) && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method))) {
+        if ("/anuncios".equals(path) && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) || "GET".equalsIgnoreCase(method))) {
             precisaAutenticacao = true;
         } else if ("/avaliacoes".equals(path) && "POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method)) {
             precisaAutenticacao = true;

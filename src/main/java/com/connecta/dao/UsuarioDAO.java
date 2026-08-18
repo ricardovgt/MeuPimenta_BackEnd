@@ -10,7 +10,7 @@ import com.connecta.entity.Usuario;
 public class UsuarioDAO {
 	
 	public static void cadastrar(Usuario usuario) {
-	    String sql = "INSERT INTO usuarios(nome, email, senha, tipo_conta) VALUES (?, ?, ?, ?)";
+	    String sql = "INSERT INTO usuarios(nome, email, senha, tipo_conta, status) VALUES (?, ?, ?, ?, 'ATIVO')";
 	    
 	    try (Connection conn = Conexao.getConnection(); 
 	         PreparedStatement prepare = conn.prepareStatement(sql)) {
@@ -42,7 +42,7 @@ public class UsuarioDAO {
 	
 	//CONSULTAS
 	public static Usuario buscarPorEmail(String email) {
-	    String sql = "SELECT id, nome, email, senha, tipo_conta, foto_perfil FROM usuarios WHERE email = ?";
+	    String sql = "SELECT id, nome, email, senha, tipo_conta, foto_perfil, status FROM usuarios WHERE email = ?";
 	    Usuario usuarioEncontrado = null;
 	    
 	    try (Connection conn = Conexao.getConnection(); 
@@ -58,7 +58,8 @@ public class UsuarioDAO {
 	                usuarioEncontrado.setEmail(result.getString("email"));
 	                usuarioEncontrado.setSenha(result.getString("senha"));
 	                usuarioEncontrado.setTipoConta(result.getString("tipo_conta"));
-	                usuarioEncontrado.setFotoPerfil(result.getString("foto_perfil")); // <-- Adicionado
+	                usuarioEncontrado.setFotoPerfil(result.getString("foto_perfil"));
+	                usuarioEncontrado.setStatus(result.getString("status")); // <-- Adicionado
 	            }
 	        }
 	    } catch (SQLException e) {
@@ -68,7 +69,7 @@ public class UsuarioDAO {
 	}
 
 	public static Usuario buscarPorId(int idUsuario) {
-	    String sql = "SELECT id, nome, email, tipo_conta, foto_perfil FROM usuarios WHERE id = ?";
+	    String sql = "SELECT id, nome, email, tipo_conta, foto_perfil, status FROM usuarios WHERE id = ?";
 	    Usuario usuarioEncontrado = null;
 	    
 	    try (Connection conn = Conexao.getConnection(); 
@@ -83,7 +84,8 @@ public class UsuarioDAO {
 	                usuarioEncontrado.setNome(result.getString("nome"));
 	                usuarioEncontrado.setEmail(result.getString("email"));
 	                usuarioEncontrado.setTipoConta(result.getString("tipo_conta"));
-	                usuarioEncontrado.setFotoPerfil(result.getString("foto_perfil")); // <-- Adicionado
+	                usuarioEncontrado.setFotoPerfil(result.getString("foto_perfil"));
+	                usuarioEncontrado.setStatus(result.getString("status")); // <-- Adicionado
 	            }
 	        }
 	    } catch (SQLException e) {
@@ -173,6 +175,21 @@ public class UsuarioDAO {
         try (Connection conn = Conexao.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, novaSenhaHash);
+            ps.setInt(2, idUsuario);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    // Usado pelo gatilho automático de moderação (3 anúncios BANIDO -> usuário BANIDO)
+    // e também pode ser usado por um painel administrativo, se houver.
+    public static boolean mudarStatus(int idUsuario, String status) {
+        String sql = "UPDATE usuarios SET status = ? WHERE id = ?";
+        try (Connection conn = Conexao.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
             ps.setInt(2, idUsuario);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {

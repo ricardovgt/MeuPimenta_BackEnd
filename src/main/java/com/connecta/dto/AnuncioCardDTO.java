@@ -1,13 +1,13 @@
 package com.connecta.dto;
 
-public class ServicoCardDTO {
+public class AnuncioCardDTO {
     private int id;
     private String nome;
     private String descricao;
     private String fotoCapa;
     private String nomeUsuario;
 
-    public ServicoCardDTO(int id, String nome, String descricao, String fotoCapa, String nomeUsuario) {
+    public AnuncioCardDTO(int id, String nome, String descricao, String fotoCapa, String nomeUsuario) {
         this.id = id;
         this.nome = nome;
         this.descricao = descricao;

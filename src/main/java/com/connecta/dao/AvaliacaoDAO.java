@@ -18,13 +18,13 @@ public class AvaliacaoDAO {
     private static final DateTimeFormatter FORMATO_DATA =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    public static boolean usuarioJaAvaliou(int idServico, int idUsuario) {
-        String sql = "SELECT 1 FROM avaliacoes WHERE id_servico = ? AND id_usuario = ?";
+    public static boolean usuarioJaAvaliou(int idAnuncio, int idUsuario) {
+        String sql = "SELECT 1 FROM avaliacoes WHERE id_anuncio = ? AND id_usuario = ?";
 
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql)) {
 
-            prepare.setInt(1, idServico);
+            prepare.setInt(1, idAnuncio);
             prepare.setInt(2, idUsuario);
 
             try (ResultSet result = prepare.executeQuery()) {
@@ -37,12 +37,12 @@ public class AvaliacaoDAO {
     }
 
     public static boolean registrar(Avaliacao avaliacao) {
-        String sqlUpsert = "INSERT INTO avaliacoes (id_servico, id_usuario, nota, comentario, data_avaliacao) "
+        String sqlUpsert = "INSERT INTO avaliacoes (id_anuncio, id_usuario, nota, comentario, data_avaliacao) "
                 + "VALUES (?, ?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE nota = VALUES(nota), comentario = VALUES(comentario), "
                 + "data_avaliacao = VALUES(data_avaliacao)";
-        String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_servico = ?";
-        String sqlUpdate = "UPDATE servicos SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
+        String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_anuncio = ?";
+        String sqlUpdate = "UPDATE anuncios SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
 
         Connection conn = null;
 
@@ -51,7 +51,7 @@ public class AvaliacaoDAO {
             conn.setAutoCommit(false);
 
             try (PreparedStatement psUpsert = conn.prepareStatement(sqlUpsert)) {
-                psUpsert.setInt(1, avaliacao.getIdServico());
+                psUpsert.setInt(1, avaliacao.getIdAnuncio());
                 psUpsert.setInt(2, avaliacao.getIdUsuario());
                 psUpsert.setDouble(3, avaliacao.getNota());
                 psUpsert.setString(4, avaliacao.getComentario());
@@ -63,7 +63,7 @@ public class AvaliacaoDAO {
             int novoTotal = 0;
 
             try (PreparedStatement psAgregado = conn.prepareStatement(sqlAgregado)) {
-                psAgregado.setInt(1, avaliacao.getIdServico());
+                psAgregado.setInt(1, avaliacao.getIdAnuncio());
                 try (ResultSet rs = psAgregado.executeQuery()) {
                     if (rs.next()) {
                         novaMedia = rs.getDouble("media");
@@ -75,7 +75,7 @@ public class AvaliacaoDAO {
             try (PreparedStatement psUpdate = conn.prepareStatement(sqlUpdate)) {
                 psUpdate.setDouble(1, novaMedia);
                 psUpdate.setInt(2, novoTotal);
-                psUpdate.setInt(3, avaliacao.getIdServico());
+                psUpdate.setInt(3, avaliacao.getIdAnuncio());
                 psUpdate.executeUpdate();
             }
 
@@ -105,10 +105,10 @@ public class AvaliacaoDAO {
     }
 
     public static boolean remover(int idAvaliacao, int idUsuario) {
-        String sqlBuscarServico = "SELECT id_servico FROM avaliacoes WHERE id = ? AND id_usuario = ? FOR UPDATE";
+        String sqlBuscarAnuncio = "SELECT id_anuncio FROM avaliacoes WHERE id = ? AND id_usuario = ? FOR UPDATE";
         String sqlDelete = "DELETE FROM avaliacoes WHERE id = ? AND id_usuario = ?";
-        String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_servico = ?";
-        String sqlUpdate = "UPDATE servicos SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
+        String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_anuncio = ?";
+        String sqlUpdate = "UPDATE anuncios SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
 
         Connection conn = null;
 
@@ -116,17 +116,17 @@ public class AvaliacaoDAO {
             conn = Conexao.getConnection();
             conn.setAutoCommit(false);
 
-            int idServico;
-            try (PreparedStatement psBuscarServico = conn.prepareStatement(sqlBuscarServico)) {
-                psBuscarServico.setInt(1, idAvaliacao);
-                psBuscarServico.setInt(2, idUsuario);
+            int idAnuncio;
+            try (PreparedStatement psBuscarAnuncio = conn.prepareStatement(sqlBuscarAnuncio)) {
+                psBuscarAnuncio.setInt(1, idAvaliacao);
+                psBuscarAnuncio.setInt(2, idUsuario);
 
-                try (ResultSet rs = psBuscarServico.executeQuery()) {
+                try (ResultSet rs = psBuscarAnuncio.executeQuery()) {
                     if (!rs.next()) {
                         conn.rollback();
                         return false;
                     }
-                    idServico = rs.getInt("id_servico");
+                    idAnuncio = rs.getInt("id_anuncio");
                 }
             }
 
@@ -140,7 +140,7 @@ public class AvaliacaoDAO {
             int novoTotal = 0;
 
             try (PreparedStatement psAgregado = conn.prepareStatement(sqlAgregado)) {
-                psAgregado.setInt(1, idServico);
+                psAgregado.setInt(1, idAnuncio);
                 try (ResultSet rs = psAgregado.executeQuery()) {
                     if (rs.next()) {
                         novaMedia = rs.getDouble("media");
@@ -152,7 +152,7 @@ public class AvaliacaoDAO {
             try (PreparedStatement psUpdate = conn.prepareStatement(sqlUpdate)) {
                 psUpdate.setDouble(1, novaMedia);
                 psUpdate.setInt(2, novoTotal);
-                psUpdate.setInt(3, idServico);
+                psUpdate.setInt(3, idAnuncio);
                 psUpdate.executeUpdate();
             }
 
@@ -180,9 +180,9 @@ public class AvaliacaoDAO {
         }
     }
 
-//     Retorna a lista paginada de avaliacoes (com nome do autor) para um servico,
+//     Retorna a lista paginada de avaliacoes (com nome do autor) para um anúncio,
 //     ordenada da mais recente para a mais antiga.
-    public static List<AvaliacaoDTO> listarPorServicoPaginado(int idServico, int pagina, int limite) {
+    public static List<AvaliacaoDTO> listarPorAnuncioPaginado(int idAnuncio, int pagina, int limite) {
         List<AvaliacaoDTO> lista = new ArrayList<>();
 
         int paginaSegura = Math.max(pagina, 1);
@@ -193,14 +193,14 @@ public class AvaliacaoDAO {
                 + "u.id AS id_usuario, u.nome AS nome_usuario, u.foto_perfil AS foto_perfil_usuario " 
                 + "FROM avaliacoes a "
                 + "JOIN usuarios u ON a.id_usuario = u.id "
-                + "WHERE a.id_servico = ? "
+                + "WHERE a.id_anuncio = ? "
                 + "ORDER BY a.data_avaliacao DESC "
                 + "LIMIT ? OFFSET ?";
 
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql)) {
 
-            prepare.setInt(1, idServico);
+            prepare.setInt(1, idAnuncio);
             prepare.setInt(2, limiteSeguro);
             prepare.setInt(3, offset);
 
@@ -229,15 +229,15 @@ public class AvaliacaoDAO {
         return lista;
     }
 
-//     Conta o total de avaliacoes cadastradas para um servico, usado para
+//     Conta o total de avaliacoes cadastradas para um anúncio, usado para
 //     calcular o total de paginas na rolagem continua.
-    public static int contarTotalAvaliacoes(int idServico) {
-        String sql = "SELECT COUNT(*) FROM avaliacoes WHERE id_servico = ?";
+    public static int contarTotalAvaliacoes(int idAnuncio) {
+        String sql = "SELECT COUNT(*) FROM avaliacoes WHERE id_anuncio = ?";
 
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql)) {
 
-            prepare.setInt(1, idServico);
+            prepare.setInt(1, idAnuncio);
 
             try (ResultSet result = prepare.executeQuery()) {
                 if (result.next()) {

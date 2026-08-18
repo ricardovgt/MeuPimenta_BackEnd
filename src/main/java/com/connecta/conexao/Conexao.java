@@ -20,6 +20,7 @@ public class Conexao {
                 return null;
             }
             
+            System.out.println(">>> CONECTANDO NO BANCO: " + url);
             return DriverManager.getConnection(url, user, password);
             
         } catch (ClassNotFoundException e) {

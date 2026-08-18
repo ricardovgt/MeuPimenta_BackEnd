@@ -2,13 +2,15 @@ package com.connecta.dto;
 
 import java.util.List;
 
-public class ServicoDetalheDTO {
+public class AnuncioDetalheDTO {
     private int id;
     private String nome;
     private String descricao;
     private String descricaoDetalhada;
     private String telefone;
-    private List<FotoServicoDTO> fotos;
+    private String tipo;
+    private String status;
+    private List<FotoAnuncioDTO> fotos;
     private double avaliacaoMedia;
     private int totalAvaliacoes;
 
@@ -23,8 +25,9 @@ public class ServicoDetalheDTO {
     private String nomeUsuario;
     private String fotoPerfilUsuario;
 
-    public ServicoDetalheDTO(int id, String nome, String descricao, String descricaoDetalhada,
-                              String telefone, List<FotoServicoDTO> fotos,
+    public AnuncioDetalheDTO(int id, String nome, String descricao, String descricaoDetalhada,
+                              String telefone, String tipo, String status,
+                              List<FotoAnuncioDTO> fotos,
                               double avaliacaoMedia, int totalAvaliacoes,
                               int total5Estrelas, int total4Estrelas, int total3Estrelas,
                               int total2Estrelas, int total1Estrelas,
@@ -34,6 +37,8 @@ public class ServicoDetalheDTO {
         this.descricao = descricao;
         this.descricaoDetalhada = descricaoDetalhada;
         this.telefone = telefone;
+        this.tipo = tipo;
+        this.status = status;
         this.fotos = fotos;
         this.avaliacaoMedia = avaliacaoMedia;
         this.totalAvaliacoes = totalAvaliacoes;
@@ -53,7 +58,9 @@ public class ServicoDetalheDTO {
     public String getDescricao() { return descricao; }
     public String getDescricaoDetalhada() { return descricaoDetalhada; }
     public String getTelefone() { return telefone; }
-    public List<FotoServicoDTO> getFotos() { return fotos; }
+    public String getTipo() { return tipo; }
+    public String getStatus() { return status; }
+    public List<FotoAnuncioDTO> getFotos() { return fotos; }
     public double getAvaliacaoMedia() { return avaliacaoMedia; }
     public int getTotalAvaliacoes() { return totalAvaliacoes; }
 
