@@ -78,10 +78,19 @@ public class AnuncioServlet extends HttpServlet {
             // 3. BUSCA GERAL DE ANÚNCIOS
             String busca = req.getParameter("busca");
             String topParam = req.getParameter("top");
+            String tipoParam = req.getParameter("tipo");
             boolean topAvaliacoes = "true".equalsIgnoreCase(topParam);
 
+            String tipo = normalizarTipo(tipoParam);
+            if (tipoParam != null && !tipoParam.trim().isEmpty() && tipo == null) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"Tipo inválido. Use SERVICO ou COMERCIO.\"}");
+                return;
+            }
+
             List<AnuncioCardDTO> anuncios =
-                    AnuncioDAO.buscarAnunciosCard(busca, topAvaliacoes);
+                    AnuncioDAO.buscarAnunciosCard(busca, topAvaliacoes, tipo);
 
             res.setStatus(HttpServletResponse.SC_OK);
             res.getWriter().print(gson.toJson(anuncios));

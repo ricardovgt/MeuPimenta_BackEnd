@@ -16,6 +16,9 @@ import com.connecta.entity.Anuncio;
 
 public class AnuncioDAO {
 
+    private static final double MEDIA_GLOBAL_AVALIACOES = 4.0;
+    private static final int PESO_MINIMO_AVALIACOES = 10;
+
 	public static boolean cadastrar(Anuncio anuncio, List<String> fotosBase64) {
 	    String sql = "INSERT INTO anuncios (id_usuario, nome, descricao, telefone, descricao_detalhada, tipo) VALUES (?, ?, ?, ?, ?, ?)";
 	    Connection conn = null;
@@ -218,7 +221,19 @@ public class AnuncioDAO {
     }
     
     public static List<AnuncioCardDTO> buscarAnunciosCard(String busca, boolean topAvaliacoes) {
+        return buscarAnunciosCard(busca, topAvaliacoes, null);
+    }
+
+    public static List<AnuncioCardDTO> buscarAnunciosCard(
+            String busca, boolean topAvaliacoes, String tipo) {
         List<AnuncioCardDTO> lista = new ArrayList<>();
+
+        String tipoFiltro = null;
+        if ("SERVICO".equalsIgnoreCase(tipo)) {
+            tipoFiltro = "SERVICO";
+        } else if ("COMERCIO".equalsIgnoreCase(tipo)) {
+            tipoFiltro = "COMERCIO";
+        }
 
         List<String> palavrasChave = new ArrayList<>();
         if (busca != null && !busca.trim().isEmpty()) {
@@ -243,7 +258,12 @@ public class AnuncioDAO {
             sql.append("SELECT * FROM ( ");
         }
 
-        sql.append("SELECT s.id, s.nome, s.descricao, f.foto_base64 AS foto_capa, s.avaliacao_media, u.nome AS nome_usuario ");
+        sql.append("SELECT s.id, s.nome, s.descricao, f.foto_base64 AS foto_capa, ")
+           .append("s.avaliacao_media, u.nome AS nome_usuario, ")
+           .append("((COALESCE(s.total_avaliacoes, 0) * COALESCE(s.avaliacao_media, 0)) + ")
+           .append(PESO_MINIMO_AVALIACOES).append(" * ").append(MEDIA_GLOBAL_AVALIACOES)
+           .append(") / (COALESCE(s.total_avaliacoes, 0) + ")
+           .append(PESO_MINIMO_AVALIACOES).append(") AS nota_ponderada ");
 
         if (!palavrasChave.isEmpty()) {
             sql.append(", (");
@@ -261,17 +281,25 @@ public class AnuncioDAO {
            .append("LEFT JOIN fotos_anuncio f ON f.id_anuncio = s.id AND f.is_capa = TRUE");
 
         if (!palavrasChave.isEmpty()) {
-            sql.append(" WHERE s.status = 'ATIVO') AS resultado WHERE pontuacao > 0 ");
+            sql.append(" WHERE s.status = 'ATIVO'");
+            if (tipoFiltro != null) {
+                sql.append(" AND s.tipo = ?");
+            }
+            sql.append(") AS resultado WHERE pontuacao > 0 ");
             
             if (topAvaliacoes) {
-                sql.append("ORDER BY pontuacao DESC, avaliacao_media DESC");
+                sql.append("ORDER BY pontuacao DESC, nota_ponderada DESC");
             } else {
                 sql.append("ORDER BY pontuacao DESC");
             }
         } else {
-            sql.append(" WHERE s.status = 'ATIVO' "); 
+            sql.append(" WHERE s.status = 'ATIVO'");
+            if (tipoFiltro != null) {
+                sql.append(" AND s.tipo = ?");
+            }
+            sql.append(" ");
             if (topAvaliacoes) {
-                sql.append("ORDER BY s.avaliacao_media DESC");
+                sql.append("ORDER BY nota_ponderada DESC");
             } else {
                 sql.append("ORDER BY s.id DESC"); 
             }
@@ -280,13 +308,17 @@ public class AnuncioDAO {
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql.toString())) {
 
+            int paramIndex = 1;
             if (!palavrasChave.isEmpty()) {
-                int paramIndex = 1;
                 for (String palavra : palavrasChave) {
                     prepare.setString(paramIndex++, palavra); 
                     prepare.setString(paramIndex++, palavra); 
                     prepare.setString(paramIndex++, palavra); 
                 }
+            }
+
+            if (tipoFiltro != null) {
+                prepare.setString(paramIndex, tipoFiltro);
             }
 
             try (ResultSet r = prepare.executeQuery()) {
@@ -402,7 +434,6 @@ public class AnuncioDAO {
     }
 
     // Dono alterna o próprio anúncio entre ATIVO e OCULTO.
-    // Não permite setar BANIDO por aqui — isso só acontece via registrarDenuncia.
     public static boolean alterarStatus(int idAnuncio, int idUsuario, String novoStatus) {
         if (!"ATIVO".equals(novoStatus) && !"OCULTO".equals(novoStatus)) {
             return false;
