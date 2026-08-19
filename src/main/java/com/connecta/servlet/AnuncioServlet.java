@@ -1,6 +1,16 @@
 package com.connecta.servlet;
 
-import java.io.BufferedReader;
+import static com.connecta.utils.ServletUtil.extrairIdAnuncioDenuncia;
+import static com.connecta.utils.ServletUtil.lerCorpo;
+import static com.connecta.utils.ServletUtil.normalizarStatusEditavel;
+import static com.connecta.utils.ServletUtil.normalizarTipo;
+import static com.connecta.utils.ServletUtil.obterIdUsuarioToken;
+import static com.connecta.utils.ServletUtil.obterIdUsuarioTokenOuPadrao;
+import static com.connecta.utils.ServletUtil.prepararResposta;
+import static com.connecta.utils.ServletUtil.responderContaBanida;
+import static com.connecta.utils.ServletUtil.tentarLerJsonObject;
+import static com.connecta.utils.ServletUtil.usuarioEstaBanido;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -469,116 +479,4 @@ public class AnuncioServlet extends HttpServlet {
         }
     }
 
-    private void prepararResposta(HttpServletResponse res) {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
-    }
-
-    private String lerCorpo(HttpServletRequest req) throws IOException {
-        StringBuilder sb = new StringBuilder();
-
-        try (BufferedReader reader = req.getReader()) {
-            String linha;
-            while ((linha = reader.readLine()) != null) {
-                sb.append(linha);
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private JsonObject tentarLerJsonObject(String corpo) {
-        if (corpo == null || corpo.trim().isEmpty()) {
-            return null;
-        }
-
-        try {
-            return gson.fromJson(corpo, JsonObject.class);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Integer extrairIdAnuncioDenuncia(HttpServletRequest req, JsonObject jsonBody) {
-        String idParam = req.getParameter("idAnuncio");
-
-        if (idParam == null || idParam.trim().isEmpty()) {
-            idParam = req.getParameter("id");
-        }
-
-        if (idParam != null && !idParam.trim().isEmpty()) {
-            try {
-                return Integer.parseInt(idParam.trim());
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-
-        if (jsonBody != null
-                && jsonBody.has("idAnuncio")
-                && !jsonBody.get("idAnuncio").isJsonNull()) {
-            try {
-                return jsonBody.get("idAnuncio").getAsInt();
-            } catch (Exception e) {
-                return null;
-            }
-        }
-
-        return null;
-    }
-
-    private Integer obterIdUsuarioToken(HttpServletRequest req) {
-        Object valor = req.getAttribute("idUsuarioToken");
-
-        if (valor instanceof Integer) {
-            return (Integer) valor;
-        }
-
-        return null;
-    }
-
-    private int obterIdUsuarioTokenOuPadrao(HttpServletRequest req, int padrao) {
-        Integer idUsuarioToken = obterIdUsuarioToken(req);
-        return idUsuarioToken != null ? idUsuarioToken : padrao;
-    }
-
-    private boolean usuarioEstaBanido(Usuario usuario) {
-        return usuario.getStatus() != null
-                && "BANIDO".equalsIgnoreCase(usuario.getStatus().trim());
-    }
-
-    private void responderContaBanida(HttpServletResponse res) throws IOException {
-        res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-        res.getWriter().print(
-                "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
-    }
-
-    private String normalizarTipo(String tipo) {
-        if (tipo == null || tipo.trim().isEmpty()) {
-            return null;
-        }
-
-        String tipoNormalizado = tipo.trim().toUpperCase();
-
-        if (!"SERVICO".equals(tipoNormalizado) && !"COMERCIO".equals(tipoNormalizado)) {
-            return null;
-        }
-
-        return tipoNormalizado;
-    }
-
-    private String normalizarStatusEditavel(String status) {
-        if (status == null || status.trim().isEmpty()) {
-            return null;
-        }
-
-        String statusNormalizado = status.trim().toUpperCase();
-
-        // BANIDO é reservado à moderação automática.
-        if (!"ATIVO".equals(statusNormalizado) && !"OCULTO".equals(statusNormalizado)) {
-            return null;
-        }
-
-        return statusNormalizado;
-    }
 }

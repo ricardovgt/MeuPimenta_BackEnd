@@ -1,6 +1,11 @@
 package com.connecta.servlet;
 
-import java.io.BufferedReader;
+import static com.connecta.utils.ServletUtil.lerCorpo;
+import static com.connecta.utils.ServletUtil.obterIdUsuarioToken;
+import static com.connecta.utils.ServletUtil.prepararResposta;
+import static com.connecta.utils.ServletUtil.responderContaBanida;
+import static com.connecta.utils.ServletUtil.usuarioEstaBanido;
+
 import java.io.IOException;
 import java.util.Date;
 
@@ -30,8 +35,7 @@ public class UsuarioServlet extends HttpServlet {
     // doPost: RESPONSÁVEL PELO CADASTRO DO USUÁRIO
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-	    res.setContentType("application/json"); 
-	    res.setCharacterEncoding("UTF-8");
+	    prepararResposta(res);
 	    
 	    try {
 	        String nome = req.getParameter("nome");
@@ -98,11 +102,10 @@ public class UsuarioServlet extends HttpServlet {
     // doGet: RESPONSÁVEL POR LISTAR OS DADOS DO USUÁRIO
     @Override
 	protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-	    res.setContentType("application/json");
-	    res.setCharacterEncoding("UTF-8");
+	    prepararResposta(res);
 	
 	    try {
-	        int idDoToken = (int) req.getAttribute("idUsuarioToken");
+	        int idDoToken = obterIdUsuarioToken(req);
 	
 	        // Busca a entidade Usuario
 	        Usuario usuario = UsuarioDAO.buscarPorId(idDoToken);
@@ -134,11 +137,10 @@ public class UsuarioServlet extends HttpServlet {
     // doPut: RESPONSÁVEL POR ATUALIZAR DADOS DO USUÁRIO (FOTO, NOME, EMAIL, SENHA, TIPO DE CONTA)
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+        prepararResposta(res);
 
         try {
-            int idDoToken = (int) req.getAttribute("idUsuarioToken");
+            int idDoToken = obterIdUsuarioToken(req);
 
             Usuario usuarioAtual = UsuarioDAO.buscarPorId(idDoToken);
 
@@ -148,24 +150,16 @@ public class UsuarioServlet extends HttpServlet {
                 return;
             }
 
-            if (usuarioAtual.getStatus() != null
-                    && "BANIDO".equalsIgnoreCase(usuarioAtual.getStatus().trim())) {
-                res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                res.getWriter().print(
-                        "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
+            if (usuarioEstaBanido(usuarioAtual)) {
+                responderContaBanida(res);
                 return;
             }
 
-            StringBuilder sb = new StringBuilder();
-            BufferedReader reader = req.getReader();
-            String linha;
-            while ((linha = reader.readLine()) != null) {
-                sb.append(linha);
-            }
+            String corpo = lerCorpo(req);
 
             UsuarioRequestDTO dadosRecebidos;
             try {
-                dadosRecebidos = new Gson().fromJson(sb.toString(), UsuarioRequestDTO.class);
+                dadosRecebidos = new Gson().fromJson(corpo, UsuarioRequestDTO.class);
             } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"Corpo da requisição em formato JSON inválido.\"}");
@@ -336,22 +330,16 @@ public class UsuarioServlet extends HttpServlet {
     // doDelete: RESPONSÁVEL POR EXCLUIR A CONTA DO USUÁRIO (EXIGE EMAIL + SENHA)
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+        prepararResposta(res);
 
         try {
-            int idDoToken = (int) req.getAttribute("idUsuarioToken");
+            int idDoToken = obterIdUsuarioToken(req);
 
-            StringBuilder sb = new StringBuilder();
-            BufferedReader reader = req.getReader();
-            String linha;
-            while ((linha = reader.readLine()) != null) {
-                sb.append(linha);
-            }
+            String corpo = lerCorpo(req);
 
             UsuarioRequestDTO dadosRecebidos;
             try {
-                dadosRecebidos = new Gson().fromJson(sb.toString(), UsuarioRequestDTO.class);
+                dadosRecebidos = new Gson().fromJson(corpo, UsuarioRequestDTO.class);
             } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"Corpo da requisição em formato JSON inválido.\"}");

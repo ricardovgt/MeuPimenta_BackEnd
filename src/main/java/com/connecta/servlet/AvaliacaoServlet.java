@@ -1,5 +1,11 @@
 package com.connecta.servlet;
 
+import static com.connecta.utils.ServletUtil.lerInteiroOuPadrao;
+import static com.connecta.utils.ServletUtil.obterIdUsuarioToken;
+import static com.connecta.utils.ServletUtil.prepararResposta;
+import static com.connecta.utils.ServletUtil.responderContaBanida;
+import static com.connecta.utils.ServletUtil.usuarioEstaBanido;
+
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -282,41 +288,4 @@ public class AvaliacaoServlet extends HttpServlet {
         }
     }
 
-    private void prepararResposta(HttpServletResponse res) {
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
-    }
-
-    private Integer obterIdUsuarioToken(HttpServletRequest req) {
-        Object valor = req.getAttribute("idUsuarioToken");
-
-        if (valor instanceof Integer) {
-            return (Integer) valor;
-        }
-
-        return null;
-    }
-
-    private boolean usuarioEstaBanido(Usuario usuario) {
-        return usuario.getStatus() != null
-                && "BANIDO".equalsIgnoreCase(usuario.getStatus().trim());
-    }
-
-    private void responderContaBanida(HttpServletResponse res) throws IOException {
-        res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-        res.getWriter().print(
-                "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
-    }
-
-    private int lerInteiroOuPadrao(String valor, int padrao) {
-        if (valor == null || valor.trim().isEmpty()) {
-            return padrao;
-        }
-
-        try {
-            return Integer.parseInt(valor.trim());
-        } catch (NumberFormatException e) {
-            return padrao;
-        }
-    }
 }

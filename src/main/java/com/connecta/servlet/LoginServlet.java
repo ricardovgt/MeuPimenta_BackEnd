@@ -1,5 +1,9 @@
 package com.connecta.servlet;
 
+import static com.connecta.utils.ServletUtil.prepararResposta;
+import static com.connecta.utils.ServletUtil.responderContaBanida;
+import static com.connecta.utils.ServletUtil.usuarioEstaBanido;
+
 import java.io.IOException;
 import java.util.Date;
 
@@ -24,8 +28,7 @@ public class LoginServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse res)
             throws ServletException, IOException {
 
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
+        prepararResposta(res);
 
         try {
             String emailParam = req.getParameter("email");
@@ -50,11 +53,8 @@ public class LoginServlet extends HttpServlet {
             }
 
             // Senha válida, mas uma conta banida não recebe um novo JWT.
-            if (usuarioBanco.getStatus() != null
-                    && "BANIDO".equalsIgnoreCase(usuarioBanco.getStatus().trim())) {
-                res.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                res.getWriter().write(
-                        "{\"erro\": \"Sua conta foi banida por violação das regras de conduta.\"}");
+            if (usuarioEstaBanido(usuarioBanco)) {
+                responderContaBanida(res);
                 return;
             }
 
