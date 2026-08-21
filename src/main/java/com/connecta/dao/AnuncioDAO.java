@@ -271,11 +271,33 @@ public class AnuncioDAO {
             buscaFiltro = null;
         }
 
-        StringBuilder filtros = new StringBuilder(" WHERE s.status = 'ATIVO'");
+        List<String> termosBusca = new ArrayList<>();
         if (buscaFiltro != null) {
+            for (String termo : buscaFiltro.split("[^\\p{L}\\p{N}]+")) {
+                String termoLimpo = termo.trim();
+                if (termoLimpo.length() >= 3 && !termosBusca.contains(termoLimpo)) {
+                    termosBusca.add(termoLimpo);
+                }
+            }
+
+            // Mantém buscas isoladas com um ou dois caracteres funcionando.
+            if (termosBusca.isEmpty()) {
+                termosBusca.add(buscaFiltro);
+            }
+        }
+
+        StringBuilder filtros = new StringBuilder(" WHERE s.status = 'ATIVO'");
+        if (!termosBusca.isEmpty()) {
             // Esta collation torna a comparação indiferente a caixa e acentos.
-            filtros.append(" AND (CONVERT(s.nome USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? ")
-                   .append("OR CONVERT(s.descricao USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?)");
+            filtros.append(" AND (");
+            for (int i = 0; i < termosBusca.size(); i++) {
+                if (i > 0) {
+                    filtros.append(" OR ");
+                }
+                filtros.append("(CONVERT(s.nome USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? ")
+                       .append("OR CONVERT(s.descricao USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?)");
+            }
+            filtros.append(")");
         }
         if (tipo != null) {
             filtros.append(" AND s.tipo = ?");
@@ -311,7 +333,7 @@ public class AnuncioDAO {
 
             long totalAnuncios;
             try (PreparedStatement ps = conn.prepareStatement(sqlContagem)) {
-                preencherFiltrosPublicos(ps, buscaFiltro, tipo);
+                preencherFiltrosPublicos(ps, termosBusca, tipo);
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     totalAnuncios = rs.getLong(1);
@@ -319,7 +341,7 @@ public class AnuncioDAO {
             }
 
             try (PreparedStatement ps = conn.prepareStatement(sqlListagem.toString())) {
-                int proximoParametro = preencherFiltrosPublicos(ps, buscaFiltro, tipo);
+                int proximoParametro = preencherFiltrosPublicos(ps, termosBusca, tipo);
                 ps.setInt(proximoParametro++, limite);
                 ps.setLong(proximoParametro, ((long) pagina - 1L) * limite);
 
@@ -343,9 +365,9 @@ public class AnuncioDAO {
     }
 
     private static int preencherFiltrosPublicos(
-            PreparedStatement ps, String busca, String tipo) throws SQLException {
+            PreparedStatement ps, List<String> termosBusca, String tipo) throws SQLException {
         int indice = 1;
-        if (busca != null) {
+        for (String busca : termosBusca) {
             String termo = "%" + busca + "%";
             ps.setString(indice++, termo);
             ps.setString(indice++, termo);
