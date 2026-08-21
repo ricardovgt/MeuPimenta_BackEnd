@@ -6,31 +6,23 @@ import java.sql.SQLException;
 
 public class Conexao {
 	
-	private static final String url = System.getenv("DB_URL");
-	private static final String user = System.getenv("DB_USER");
-	private static final String password = System.getenv("DB_PASSWORD");
+	private static final String URL = System.getenv("DB_URL");
+	private static final String USER = System.getenv("DB_USER");
+	private static final String PASSWORD = System.getenv("DB_PASSWORD");
 	public static final String JWT_SECRET = System.getenv("JWT_SECRET");
 	
-	public static Connection getConnection() {
+	public static Connection getConnection() throws SQLException {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
             
-            if (url == null || user == null || password == null) {
-                System.err.println("ERRO: Variáveis de ambiente do banco de dados não configuradas!");
-                return null;
+            if (URL == null || USER == null || PASSWORD == null) {
+                throw new SQLException("Variáveis de ambiente do banco de dados não configuradas.");
             }
             
-            System.out.println(">>> CONECTANDO NO BANCO: " + url);
-            return DriverManager.getConnection(url, user, password);
+            return DriverManager.getConnection(URL, USER, PASSWORD);
             
         } catch (ClassNotFoundException e) {
-            System.err.println("ERRO: O Driver do MySQL não foi encontrado pelo Tomcat");
-            e.printStackTrace();
-        } catch (SQLException e) {
-            System.err.println("ERRO: Falha na conexão! Verifique se o MySQL está ligado, se a senha/usuário estão certos ou se o banco existe");
-            e.printStackTrace();
+            throw new SQLException("Driver do MySQL não encontrado.", e);
         }
-        
-        return null;
     }
 }

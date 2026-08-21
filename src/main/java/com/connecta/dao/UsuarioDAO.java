@@ -26,20 +26,6 @@ public class UsuarioDAO {
 	    }
 	}
     
-	public static boolean descadastrar(int idUsuario) {
-        String sql = "DELETE FROM usuarios WHERE id = ?";
-        try (Connection conn = Conexao.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            
-            ps.setInt(1, idUsuario);
-            return ps.executeUpdate() > 0; 
-            
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
-	
 	//CONSULTAS
 	public static Usuario buscarPorEmail(String email) {
 	    String sql = "SELECT id, nome, email, senha, tipo_conta, foto_perfil, status FROM usuarios WHERE email = ?";
@@ -131,17 +117,108 @@ public class UsuarioDAO {
 	    return false;
 	}
     
-    public static boolean atualizarTipoConta(int idUsuario, String novoTipo) {
-        String sql = "UPDATE usuarios SET tipo_conta = ? WHERE id = ?";
-        try (Connection conn = Conexao.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, novoTipo);
-            ps.setInt(2, idUsuario);
-            return ps.executeUpdate() > 0;
+    public static boolean atualizarTipoContaPreservandoAnuncios(
+            int idUsuario, String novoTipo) {
+        String sqlOcultarAnunciosAtivos =
+                "UPDATE anuncios SET status = 'OCULTO' "
+                + "WHERE id_usuario = ? AND status = 'ATIVO'";
+        String sqlAtualizarTipo = "UPDATE usuarios SET tipo_conta = ? WHERE id = ?";
+        Connection conn = null;
+
+        try {
+            conn = Conexao.getConnection();
+            conn.setAutoCommit(false);
+
+            // Ao deixar de ser comercial, preserva todo o histórico. Anúncios
+            // BANIDO continuam banidos e os já OCULTO permanecem inalterados.
+            if ("COMUM".equals(novoTipo)) {
+                try (PreparedStatement ps = conn.prepareStatement(sqlOcultarAnunciosAtivos)) {
+                    ps.setInt(1, idUsuario);
+                    ps.executeUpdate();
+                }
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlAtualizarTipo)) {
+                ps.setString(1, novoTipo);
+                ps.setInt(2, idUsuario);
+                if (ps.executeUpdate() == 0) {
+                    conn.rollback();
+                    return false;
+                }
+            }
+
+            conn.commit();
+            return true;
         } catch (SQLException e) {
             e.printStackTrace();
+            if (conn != null) {
+                try { conn.rollback(); } catch (SQLException rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
+            return false;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException closeEx) {
+                    closeEx.printStackTrace();
+                }
+            }
         }
-        return false;
+    }
+
+    public static boolean descadastrarComAnuncios(int idUsuario) {
+        String sqlExcluirDenunciasRecebidas =
+                "DELETE d FROM denuncias d INNER JOIN anuncios a ON a.id = d.id_anuncio "
+                + "WHERE a.id_usuario = ?";
+        String sqlExcluirAnuncios = "DELETE FROM anuncios WHERE id_usuario = ?";
+        String sqlExcluirUsuario = "DELETE FROM usuarios WHERE id = ?";
+        Connection conn = null;
+
+        try {
+            conn = Conexao.getConnection();
+            conn.setAutoCommit(false);
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlExcluirDenunciasRecebidas)) {
+                ps.setInt(1, idUsuario);
+                ps.executeUpdate();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlExcluirAnuncios)) {
+                ps.setInt(1, idUsuario);
+                ps.executeUpdate();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlExcluirUsuario)) {
+                ps.setInt(1, idUsuario);
+                if (ps.executeUpdate() == 0) {
+                    conn.rollback();
+                    return false;
+                }
+            }
+
+            conn.commit();
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            if (conn != null) {
+                try { conn.rollback(); } catch (SQLException rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
+            return false;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                } catch (SQLException closeEx) {
+                    closeEx.printStackTrace();
+                }
+            }
+        }
     }
     
     public static boolean atualizarNome(int idUsuario, String novoNome) {
@@ -183,18 +260,4 @@ public class UsuarioDAO {
         return false;
     }
 
-    // Usado pelo gatilho automático de moderação (3 anúncios BANIDO -> usuário BANIDO)
-    // e também pode ser usado por um painel administrativo, se houver.
-    public static boolean mudarStatus(int idUsuario, String status) {
-        String sql = "UPDATE usuarios SET status = ? WHERE id = ?";
-        try (Connection conn = Conexao.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, status);
-            ps.setInt(2, idUsuario);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
-    }
 }

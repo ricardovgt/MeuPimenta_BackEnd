@@ -12,20 +12,55 @@ import com.connecta.dto.FotoAnuncioDTO;
 import com.connecta.dto.MeusAnunciosDTO;
 import com.connecta.dto.AnuncioCardDTO;
 import com.connecta.dto.AnuncioDetalheDTO;
+import com.connecta.dto.AnuncioPublicoDTO;
+import com.connecta.dto.AnunciosPaginadosDTO;
 import com.connecta.entity.Anuncio;
 
 public class AnuncioDAO {
 
     private static final double MEDIA_GLOBAL_AVALIACOES = 4.0;
     private static final int PESO_MINIMO_AVALIACOES = 10;
+    private static final int LIMITE_ANUNCIOS_POR_USUARIO = 5;
 
-	public static boolean cadastrar(Anuncio anuncio, List<String> fotosBase64) {
+    public enum ResultadoCadastro {
+        SUCESSO,
+        LIMITE_ATINGIDO,
+        ERRO
+    }
+
+	public static ResultadoCadastro cadastrar(Anuncio anuncio, List<String> fotosBase64) {
 	    String sql = "INSERT INTO anuncios (id_usuario, nome, descricao, telefone, descricao_detalhada, tipo) VALUES (?, ?, ?, ?, ?, ?)";
 	    Connection conn = null;
 
 	    try {
 	        conn = Conexao.getConnection();
+	        if (conn == null) {
+	            return ResultadoCadastro.ERRO;
+	        }
 	        conn.setAutoCommit(false);
+
+	        // O bloqueio impede dois cadastros simultâneos de ultrapassarem o limite.
+	        try (PreparedStatement ps = conn.prepareStatement(
+	                "SELECT id FROM usuarios WHERE id = ? FOR UPDATE")) {
+	            ps.setInt(1, anuncio.getIdUsuario());
+	            try (ResultSet rs = ps.executeQuery()) {
+	                if (!rs.next()) {
+	                    conn.rollback();
+	                    return ResultadoCadastro.ERRO;
+	                }
+	            }
+	        }
+
+	        try (PreparedStatement ps = conn.prepareStatement(
+	                "SELECT COUNT(*) FROM anuncios WHERE id_usuario = ?")) {
+	            ps.setInt(1, anuncio.getIdUsuario());
+	            try (ResultSet rs = ps.executeQuery()) {
+	                if (rs.next() && rs.getInt(1) >= LIMITE_ANUNCIOS_POR_USUARIO) {
+	                    conn.rollback();
+	                    return ResultadoCadastro.LIMITE_ATINGIDO;
+	                }
+	            }
+	        }
 
 	        try (PreparedStatement prepare = conn.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
 	            prepare.setInt(1, anuncio.getIdUsuario());
@@ -37,18 +72,20 @@ public class AnuncioDAO {
 
 	            if (prepare.executeUpdate() == 0) {
 	                conn.rollback();
-	                return false;
+	                return ResultadoCadastro.ERRO;
 	            }
 
 	            try (ResultSet chaves = prepare.getGeneratedKeys()) {
-	                if (chaves.next()) {
-	                    FotoAnuncioDAO.salvarFotos(conn, chaves.getInt(1), fotosBase64);
+	                if (!chaves.next()) {
+	                    conn.rollback();
+	                    return ResultadoCadastro.ERRO;
 	                }
+	                FotoAnuncioDAO.salvarFotos(conn, chaves.getInt(1), fotosBase64);
 	            }
 	        }
 
 	        conn.commit();
-	        return true;
+	        return ResultadoCadastro.SUCESSO;
 
 	    } catch (SQLException e) {
 	        e.printStackTrace();
@@ -63,19 +100,21 @@ public class AnuncioDAO {
 	            } catch (SQLException e) { e.printStackTrace(); }
 	        }
 	    }
-	    return false;
+	    return ResultadoCadastro.ERRO;
 	}
 	
 	public static boolean deletar(int idAnuncio, int idUsuarioDono) {
         String sqlVerificarDono =
-                "SELECT id FROM anuncios WHERE id = ? AND id_usuario = ? FOR UPDATE";
+                "SELECT id FROM anuncios "
+                + "WHERE id = ? AND id_usuario = ? AND status <> 'BANIDO' FOR UPDATE";
         String sqlExcluirDenuncias = "DELETE FROM denuncias WHERE id_anuncio = ?";
-        String sqlExcluirAnuncio = "DELETE FROM anuncios WHERE id = ? AND id_usuario = ?";
+        String sqlExcluirAnuncio =
+                "DELETE FROM anuncios "
+                + "WHERE id = ? AND id_usuario = ? AND status <> 'BANIDO'";
         Connection conn = null;
 
         try {
             conn = Conexao.getConnection();
-            if (conn == null) return false;
             conn.setAutoCommit(false);
 
             try (PreparedStatement ps = conn.prepareStatement(sqlVerificarDono)) {
@@ -190,7 +229,10 @@ public class AnuncioDAO {
             "f.foto_base64 AS foto_capa, u.nome AS nome_usuario " +
             "FROM anuncios s " +
             "JOIN usuarios u ON s.id_usuario = u.id " +
-            "LEFT JOIN fotos_anuncio f ON f.id_anuncio = s.id AND f.is_capa = TRUE " +
+            "LEFT JOIN (SELECT id_anuncio, MIN(id) AS id_foto " +
+            "FROM fotos_anuncio WHERE is_capa = TRUE GROUP BY id_anuncio) capa " +
+            "ON capa.id_anuncio = s.id " +
+            "LEFT JOIN fotos_anuncio f ON f.id = capa.id_foto " +
             "WHERE s.id_usuario = ? " +
             "ORDER BY s.id DESC";
 
@@ -220,106 +262,122 @@ public class AnuncioDAO {
         return lista;
     }
     
-    public static List<AnuncioCardDTO> buscarAnunciosCard(String busca, boolean topAvaliacoes) {
-        return buscarAnunciosCard(busca, topAvaliacoes, null);
-    }
-
-    public static List<AnuncioCardDTO> buscarAnunciosCard(
-            String busca, boolean topAvaliacoes, String tipo) {
-        List<AnuncioCardDTO> lista = new ArrayList<>();
-
-        String tipoFiltro = null;
-        if ("SERVICO".equalsIgnoreCase(tipo)) {
-            tipoFiltro = "SERVICO";
-        } else if ("COMERCIO".equalsIgnoreCase(tipo)) {
-            tipoFiltro = "COMERCIO";
+    public static AnunciosPaginadosDTO buscarAnunciosPublicosPaginados(
+            int pagina, int limite, String busca, String tipo, boolean topAvaliacoes)
+            throws SQLException {
+        List<AnuncioPublicoDTO> anuncios = new ArrayList<>();
+        String buscaFiltro = busca == null ? null : busca.trim();
+        if (buscaFiltro != null && buscaFiltro.isEmpty()) {
+            buscaFiltro = null;
         }
 
-        List<String> palavrasChave = new ArrayList<>();
-        if (busca != null && !busca.trim().isEmpty()) {
-            String[] palavras = busca.toLowerCase().split("\\s+");
-            List<String> preposicoes = java.util.Arrays.asList(
-                "a", "ante", "após", "ate", "até", "com", "contra", "de", 
-                "desde", "em", "entre", "para", "perante", "por", "sem", 
-                "sob", "sobre", "tras", "trás"
-            );
+        StringBuilder filtros = new StringBuilder(" WHERE s.status = 'ATIVO'");
+        if (buscaFiltro != null) {
+            // Esta collation torna a comparação indiferente a caixa e acentos.
+            filtros.append(" AND (CONVERT(s.nome USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? ")
+                   .append("OR CONVERT(s.descricao USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ?)");
+        }
+        if (tipo != null) {
+            filtros.append(" AND s.tipo = ?");
+        }
 
-            for (String palavra : palavras) {
-                palavra = palavra.replaceAll("[^a-záéíóúãõç]", "");
-                if (!preposicoes.contains(palavra) && palavra.length() > 1) {
-                    palavrasChave.add("%" + palavra + "%");
+        String sqlContagem = "SELECT COUNT(*) FROM anuncios s" + filtros;
+        StringBuilder sqlListagem = new StringBuilder()
+                .append("SELECT s.id, s.nome, s.descricao, f.foto_base64 AS foto_capa, ")
+                .append("u.nome AS nome_usuario, s.tipo, ")
+                .append("COALESCE(s.avaliacao_media, 0) AS avaliacao_media, ")
+                .append("COALESCE(s.total_avaliacoes, 0) AS total_avaliacoes ")
+                .append("FROM anuncios s ")
+                .append("JOIN usuarios u ON u.id = s.id_usuario ")
+                .append("LEFT JOIN (SELECT id_anuncio, MIN(id) AS id_foto ")
+                .append("FROM fotos_anuncio WHERE is_capa = TRUE GROUP BY id_anuncio) capa ")
+                .append("ON capa.id_anuncio = s.id ")
+                .append("LEFT JOIN fotos_anuncio f ON f.id = capa.id_foto")
+                .append(filtros);
+
+        if (topAvaliacoes) {
+            sqlListagem.append(" ORDER BY COALESCE(s.avaliacao_media, 0) DESC, ")
+                       .append("COALESCE(s.total_avaliacoes, 0) DESC, s.id DESC");
+        } else {
+            // O modelo atual não possui data de criação; IDs maiores são os mais recentes.
+            sqlListagem.append(" ORDER BY s.id DESC");
+        }
+        sqlListagem.append(" LIMIT ? OFFSET ?");
+
+        try (Connection conn = Conexao.getConnection()) {
+            if (conn == null) {
+                throw new SQLException("Não foi possível obter conexão com o banco de dados.");
+            }
+
+            long totalAnuncios;
+            try (PreparedStatement ps = conn.prepareStatement(sqlContagem)) {
+                preencherFiltrosPublicos(ps, buscaFiltro, tipo);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    totalAnuncios = rs.getLong(1);
                 }
             }
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlListagem.toString())) {
+                int proximoParametro = preencherFiltrosPublicos(ps, buscaFiltro, tipo);
+                ps.setInt(proximoParametro++, limite);
+                ps.setLong(proximoParametro, ((long) pagina - 1L) * limite);
+
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        anuncios.add(new AnuncioPublicoDTO(
+                                rs.getInt("id"),
+                                rs.getString("nome"),
+                                rs.getString("descricao"),
+                                rs.getString("foto_capa"),
+                                rs.getString("nome_usuario"),
+                                rs.getString("tipo"),
+                                rs.getDouble("avaliacao_media"),
+                                rs.getInt("total_avaliacoes")));
+                    }
+                }
+            }
+
+            return new AnunciosPaginadosDTO(anuncios, pagina, limite, totalAnuncios);
         }
+    }
+
+    private static int preencherFiltrosPublicos(
+            PreparedStatement ps, String busca, String tipo) throws SQLException {
+        int indice = 1;
+        if (busca != null) {
+            String termo = "%" + busca + "%";
+            ps.setString(indice++, termo);
+            ps.setString(indice++, termo);
+        }
+        if (tipo != null) {
+            ps.setString(indice++, tipo);
+        }
+        return indice;
+    }
+
+    public static List<AnuncioCardDTO> buscarAnunciosDestaque() {
+        List<AnuncioCardDTO> lista = new ArrayList<>();
 
         StringBuilder sql = new StringBuilder();
-
-        if (!palavrasChave.isEmpty()) {
-            sql.append("SELECT * FROM ( ");
-        }
 
         sql.append("SELECT s.id, s.nome, s.descricao, f.foto_base64 AS foto_capa, ")
            .append("s.avaliacao_media, u.nome AS nome_usuario, ")
            .append("((COALESCE(s.total_avaliacoes, 0) * COALESCE(s.avaliacao_media, 0)) + ")
            .append(PESO_MINIMO_AVALIACOES).append(" * ").append(MEDIA_GLOBAL_AVALIACOES)
            .append(") / (COALESCE(s.total_avaliacoes, 0) + ")
-           .append(PESO_MINIMO_AVALIACOES).append(") AS nota_ponderada ");
-
-        if (!palavrasChave.isEmpty()) {
-            sql.append(", (");
-            for (int i = 0; i < palavrasChave.size(); i++) {
-                if (i > 0) sql.append(" + ");
-                sql.append("(IF(LOWER(s.nome) LIKE ?, 3, 0) + ")
-                   .append("IF(LOWER(s.descricao) LIKE ?, 2, 0) + ")
-                   .append("IF(LOWER(s.descricao_detalhada) LIKE ?, 1, 0))");
-            }
-            sql.append(") AS pontuacao ");
-        }
-
-        sql.append("FROM anuncios s ")
+           .append(PESO_MINIMO_AVALIACOES).append(") AS nota_ponderada ")
+           .append("FROM anuncios s ")
            .append("JOIN usuarios u ON s.id_usuario = u.id ")
-           .append("LEFT JOIN fotos_anuncio f ON f.id_anuncio = s.id AND f.is_capa = TRUE");
-
-        if (!palavrasChave.isEmpty()) {
-            sql.append(" WHERE s.status = 'ATIVO'");
-            if (tipoFiltro != null) {
-                sql.append(" AND s.tipo = ?");
-            }
-            sql.append(") AS resultado WHERE pontuacao > 0 ");
-            
-            if (topAvaliacoes) {
-                sql.append("ORDER BY pontuacao DESC, nota_ponderada DESC");
-            } else {
-                sql.append("ORDER BY pontuacao DESC");
-            }
-        } else {
-            sql.append(" WHERE s.status = 'ATIVO'");
-            if (tipoFiltro != null) {
-                sql.append(" AND s.tipo = ?");
-            }
-            sql.append(" ");
-            if (topAvaliacoes) {
-                sql.append("ORDER BY nota_ponderada DESC");
-            } else {
-                sql.append("ORDER BY s.id DESC"); 
-            }
-        }
+           .append("LEFT JOIN (SELECT id_anuncio, MIN(id) AS id_foto ")
+           .append("FROM fotos_anuncio WHERE is_capa = TRUE GROUP BY id_anuncio) capa ")
+           .append("ON capa.id_anuncio = s.id ")
+           .append("LEFT JOIN fotos_anuncio f ON f.id = capa.id_foto ")
+           .append("WHERE s.status = 'ATIVO' ")
+           .append("ORDER BY nota_ponderada DESC, s.id DESC LIMIT 3");
 
         try (Connection conn = Conexao.getConnection();
              PreparedStatement prepare = conn.prepareStatement(sql.toString())) {
-
-            int paramIndex = 1;
-            if (!palavrasChave.isEmpty()) {
-                for (String palavra : palavrasChave) {
-                    prepare.setString(paramIndex++, palavra); 
-                    prepare.setString(paramIndex++, palavra); 
-                    prepare.setString(paramIndex++, palavra); 
-                }
-            }
-
-            if (tipoFiltro != null) {
-                prepare.setString(paramIndex, tipoFiltro);
-            }
 
             try (ResultSet r = prepare.executeQuery()) {
                 while (r.next()) {
@@ -337,7 +395,7 @@ public class AnuncioDAO {
         }
         return lista;
     }
-    
+
     //MODIFCAÇÕES DE DADOS
 
     public static boolean atualizar(Anuncio anuncio, int idUsuarioDono,
@@ -393,46 +451,6 @@ public class AnuncioDAO {
         return false;
     }
     
-    public static boolean excluirTodosPorUsuario(int idUsuario) {
-        String sqlExcluirDenunciasRecebidas =
-                "DELETE d FROM denuncias d INNER JOIN anuncios a ON a.id = d.id_anuncio " +
-                "WHERE a.id_usuario = ?";
-        String sqlExcluirAnuncios = "DELETE FROM anuncios WHERE id_usuario = ?";
-        Connection conn = null;
-
-        try {
-            conn = Conexao.getConnection();
-            if (conn == null) return false;
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement ps = conn.prepareStatement(sqlExcluirDenunciasRecebidas)) {
-                ps.setInt(1, idUsuario);
-                ps.executeUpdate();
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(sqlExcluirAnuncios)) {
-                ps.setInt(1, idUsuario);
-                ps.executeUpdate();
-            }
-
-            conn.commit();
-            return true;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            if (conn != null) {
-                try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
-            }
-            return false;
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.setAutoCommit(true);
-                    conn.close();
-                } catch (SQLException e) { e.printStackTrace(); }
-            }
-        }
-    }
-
     // Dono alterna o próprio anúncio entre ATIVO e OCULTO.
     public static boolean alterarStatus(int idAnuncio, int idUsuario, String novoStatus) {
         if (!"ATIVO".equals(novoStatus) && !"OCULTO".equals(novoStatus)) {

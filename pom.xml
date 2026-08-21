@@ -7,6 +7,9 @@
   <version>0.0.1-SNAPSHOT</version>
   <name>connecta-api Maven Webapp</name>
   <url>http://maven.apache.org</url>
+  <properties>
+    <maven.compiler.release>25</maven.compiler.release>
+  </properties>
   
   <dependencies>
         <dependency>
@@ -49,5 +52,12 @@
     
   <build>
     <finalName>connecta-api</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+    </plugins>
   </build>
 </project>

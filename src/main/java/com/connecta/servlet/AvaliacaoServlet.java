@@ -34,7 +34,7 @@ public class AvaliacaoServlet extends HttpServlet {
     private static final int LIMITE_PADRAO = 10;
     private static final int PAGINA_PADRAO = 1;
 
-    private final Gson gson = new Gson();
+    private static final Gson GSON = new Gson();
 
     // LISTA AS AVALIAÇÕES DE UM ANÚNCIO DE FORMA PAGINADA
     @Override
@@ -72,6 +72,7 @@ public class AvaliacaoServlet extends HttpServlet {
             if (limite < 1) {
                 limite = LIMITE_PADRAO;
             }
+            limite = Math.min(limite, 50);
 
             List<AvaliacaoDTO> avaliacoes =
                     AvaliacaoDAO.listarPorAnuncioPaginado(idAnuncio, pagina, limite);
@@ -88,7 +89,7 @@ public class AvaliacaoServlet extends HttpServlet {
             );
 
             res.setStatus(HttpServletResponse.SC_OK);
-            res.getWriter().print(gson.toJson(resposta));
+            res.getWriter().print(GSON.toJson(resposta));
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -149,7 +150,13 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            if (nota < 1 || nota > 5) {
+            if (idAnuncio < 1) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print("{\"erro\": \"idAnuncio inválido.\"}");
+                return;
+            }
+
+            if (!Double.isFinite(nota) || nota < 1 || nota > 5) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"A nota deve ser entre 1 e 5.\"}");
                 return;
@@ -240,7 +247,7 @@ public class AvaliacaoServlet extends HttpServlet {
             JsonObject json;
 
             try {
-                json = gson.fromJson(req.getReader(), JsonObject.class);
+                json = GSON.fromJson(req.getReader(), JsonObject.class);
             } catch (RuntimeException e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print("{\"erro\": \"JSON inválido.\"}");

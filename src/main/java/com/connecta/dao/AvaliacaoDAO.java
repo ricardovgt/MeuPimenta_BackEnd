@@ -37,6 +37,7 @@ public class AvaliacaoDAO {
     }
 
     public static boolean registrar(Avaliacao avaliacao) {
+        String sqlBloquearAnuncio = "SELECT id FROM anuncios WHERE id = ? FOR UPDATE";
         String sqlUpsert = "INSERT INTO avaliacoes (id_anuncio, id_usuario, nota, comentario, data_avaliacao) "
                 + "VALUES (?, ?, ?, ?, ?) "
                 + "ON DUPLICATE KEY UPDATE nota = VALUES(nota), comentario = VALUES(comentario), "
@@ -49,6 +50,17 @@ public class AvaliacaoDAO {
         try {
             conn = Conexao.getConnection();
             conn.setAutoCommit(false);
+
+            // Serializa alterações no mesmo anúncio para manter os agregados consistentes.
+            try (PreparedStatement ps = conn.prepareStatement(sqlBloquearAnuncio)) {
+                ps.setInt(1, avaliacao.getIdAnuncio());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                }
+            }
 
             try (PreparedStatement psUpsert = conn.prepareStatement(sqlUpsert)) {
                 psUpsert.setInt(1, avaliacao.getIdAnuncio());
@@ -105,7 +117,8 @@ public class AvaliacaoDAO {
     }
 
     public static boolean remover(int idAvaliacao, int idUsuario) {
-        String sqlBuscarAnuncio = "SELECT id_anuncio FROM avaliacoes WHERE id = ? AND id_usuario = ? FOR UPDATE";
+        String sqlBuscarAnuncio = "SELECT id_anuncio FROM avaliacoes WHERE id = ? AND id_usuario = ?";
+        String sqlBloquearAnuncio = "SELECT id FROM anuncios WHERE id = ? FOR UPDATE";
         String sqlDelete = "DELETE FROM avaliacoes WHERE id = ? AND id_usuario = ?";
         String sqlAgregado = "SELECT AVG(nota) AS media, COUNT(*) AS total FROM avaliacoes WHERE id_anuncio = ?";
         String sqlUpdate = "UPDATE anuncios SET avaliacao_media = ?, total_avaliacoes = ? WHERE id = ?";
@@ -130,10 +143,23 @@ public class AvaliacaoDAO {
                 }
             }
 
+            try (PreparedStatement ps = conn.prepareStatement(sqlBloquearAnuncio)) {
+                ps.setInt(1, idAnuncio);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                }
+            }
+
             try (PreparedStatement psDelete = conn.prepareStatement(sqlDelete)) {
                 psDelete.setInt(1, idAvaliacao);
                 psDelete.setInt(2, idUsuario);
-                psDelete.executeUpdate();
+                if (psDelete.executeUpdate() == 0) {
+                    conn.rollback();
+                    return false;
+                }
             }
 
             double novaMedia = 0;
@@ -187,7 +213,7 @@ public class AvaliacaoDAO {
 
         int paginaSegura = Math.max(pagina, 1);
         int limiteSeguro = Math.max(limite, 1);
-        int offset = (paginaSegura - 1) * limiteSeguro;
+        long offset = ((long) paginaSegura - 1L) * limiteSeguro;
 
         String sql = "SELECT a.id, a.nota, a.comentario, a.data_avaliacao, "
                 + "u.id AS id_usuario, u.nome AS nome_usuario, u.foto_perfil AS foto_perfil_usuario " 
@@ -202,7 +228,7 @@ public class AvaliacaoDAO {
 
             prepare.setInt(1, idAnuncio);
             prepare.setInt(2, limiteSeguro);
-            prepare.setInt(3, offset);
+            prepare.setLong(3, offset);
 
             try (ResultSet result = prepare.executeQuery()) {
                 while (result.next()) {

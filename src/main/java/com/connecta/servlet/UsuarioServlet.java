@@ -14,7 +14,6 @@ import org.mindrot.jbcrypt.BCrypt;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.connecta.dao.AnuncioDAO;
 import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.UsuarioRequestDTO;
 import com.connecta.dto.UsuarioResponseDTO;
@@ -43,14 +42,24 @@ public class UsuarioServlet extends HttpServlet {
 	        String senha = req.getParameter("senha");
 	        String tipoConta = req.getParameter("tipo_conta");
 	        
-	        if (nome == null || email == null || senha == null || nome.trim().isEmpty() || email.isEmpty()) {
+	        if (nome == null || email == null || senha == null || nome.trim().isEmpty()
+	                || email.isEmpty() || senha.trim().isEmpty()) {
 	            res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 	            res.getWriter().print("{\"erro\": \"Campos obrigatórios ausentes.\"}");
 	            return;
 	        }
+
+	        String nomeLimpo = nome.trim();
+	        if (nomeLimpo.length() < 3 || nomeLimpo.length() > 30) {
+	            res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+	            res.getWriter().print(
+	                    "{\"erro\": \"O nome deve ter entre 3 e 30 caracteres.\"}");
+	            return;
+	        }
 	        
 	        // Validação do tipo de conta (nunca confie só no que vem do front)
-	        if (tipoConta == null || (!tipoConta.equalsIgnoreCase("COMUM") && !tipoConta.equalsIgnoreCase("COMERCIAL"))) {
+	        String tipoNormalizado = tipoConta != null ? tipoConta.trim().toUpperCase() : null;
+	        if (!"COMUM".equals(tipoNormalizado) && !"COMERCIAL".equals(tipoNormalizado)) {
 	            res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 	            res.getWriter().print("{\"erro\": \"Tipo de conta inválido. Use COMUM ou COMERCIAL.\"}");
 	            return;
@@ -71,11 +80,11 @@ public class UsuarioServlet extends HttpServlet {
 	        }
 	        
 	        Usuario usuario = new Usuario();
-	        usuario.setNome(nome);
+	        usuario.setNome(nomeLimpo);
 	        usuario.setEmail(email);
 	        String senhaHash = BCrypt.hashpw(senha, BCrypt.gensalt(12));
 	        usuario.setSenha(senhaHash);
-	        usuario.setTipoConta(tipoConta.toUpperCase());
+	        usuario.setTipoConta(tipoNormalizado);
 	        
 	        UsuarioDAO.cadastrar(usuario);
 	        
@@ -214,10 +223,16 @@ public class UsuarioServlet extends HttpServlet {
                     return;
                 }
 
-                // Ao trocar o tipo de conta, remove todos os anúncios já publicados
-                AnuncioDAO.excluirTodosPorUsuario(idDoToken);
+                if (tipoNormalizado.equalsIgnoreCase(usuarioAtual.getTipoConta())) {
+                    res.setStatus(HttpServletResponse.SC_OK);
+                    res.getWriter().print(
+                            "{\"mensagem\": \"O tipo de conta informado já está ativo.\"}");
+                    return;
+                }
 
-                boolean atualizado = UsuarioDAO.atualizarTipoConta(idDoToken, tipoNormalizado);
+                // Ao virar COMUM, anúncios ativos são ocultados sem apagar o histórico.
+                boolean atualizado = UsuarioDAO.atualizarTipoContaPreservandoAnuncios(
+                        idDoToken, tipoNormalizado);
                 if (atualizado) {
                     res.setStatus(HttpServletResponse.SC_OK);
                     res.getWriter().print("{\"mensagem\": \"Tipo de conta atualizado com sucesso!\"}");
@@ -237,7 +252,7 @@ public class UsuarioServlet extends HttpServlet {
                 
                 if (nomeLimpo.length() > 30) {
                     res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    res.getWriter().print("{\"erro\": \"O nome tem um limite máximo de 50 caracteres.\"}");
+                    res.getWriter().print("{\"erro\": \"O nome tem um limite máximo de 30 caracteres.\"}");
                     return;
                 }
 
@@ -374,8 +389,7 @@ public class UsuarioServlet extends HttpServlet {
                 return;
             }
 
-            AnuncioDAO.excluirTodosPorUsuario(idDoToken);
-            boolean contaExcluida = UsuarioDAO.descadastrar(idDoToken);
+            boolean contaExcluida = UsuarioDAO.descadastrarComAnuncios(idDoToken);
 
             if (contaExcluida) {
                 res.setStatus(HttpServletResponse.SC_OK);

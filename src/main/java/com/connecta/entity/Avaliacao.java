@@ -3,7 +3,6 @@ package com.connecta.entity;
 import java.time.LocalDateTime;
 
 public class Avaliacao {
-    private int id;
     private int idAnuncio;
     private int idUsuario;
     private double nota;
@@ -11,7 +10,6 @@ public class Avaliacao {
     private LocalDateTime dataAvaliacao;
 
     // Getters
-    public int getId() { return id; }
     public int getIdAnuncio() { return idAnuncio; }
     public int getIdUsuario() { return idUsuario; }
     public double getNota() { return nota; }
@@ -19,7 +17,6 @@ public class Avaliacao {
     public LocalDateTime getDataAvaliacao() { return dataAvaliacao; }
 
     // Setters
-    public void setId(int id) { this.id = id; }
     public void setIdAnuncio(int idAnuncio) { this.idAnuncio = idAnuncio; }
     public void setIdUsuario(int idUsuario) { this.idUsuario = idUsuario; }
     public void setNota(double nota) { this.nota = nota; }

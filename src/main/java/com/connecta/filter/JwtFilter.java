@@ -34,21 +34,30 @@ public class JwtFilter implements Filter {
         String path = req.getServletPath();
         String method = req.getMethod();
 
-        // Identifica quais métodos de quais rotas exigem Token JWT
-        boolean precisaAutenticacao = false;
+        // Identifica quais métodos de quais rotas exigem Token JWT.
+        boolean rotaAnunciosProtegida = "/anuncios".equals(path)
+                && ("POST".equalsIgnoreCase(method)
+                        || "PUT".equalsIgnoreCase(method)
+                        || "DELETE".equalsIgnoreCase(method)
+                        || ("GET".equalsIgnoreCase(method)
+                                && "true".equalsIgnoreCase(req.getParameter("meus"))));
+        boolean rotaAvaliacoesProtegida = "/avaliacoes".equals(path)
+                && ("POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method));
+        boolean rotaUsuarioProtegida = "/usuario".equals(path)
+                && ("GET".equalsIgnoreCase(method)
+                        || "PUT".equalsIgnoreCase(method)
+                        || "DELETE".equalsIgnoreCase(method));
+        boolean precisaAutenticacao = rotaAnunciosProtegida
+                || rotaAvaliacoesProtegida
+                || rotaUsuarioProtegida;
+        boolean aceitaAutenticacaoOpcional = "/anuncios".equals(path)
+                && "GET".equalsIgnoreCase(method)
+                && req.getParameter("id") != null
+                && !req.getParameter("id").trim().isEmpty();
 
-        if ("/anuncios".equals(path) && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method) 
-        		|| "GET".equalsIgnoreCase(method) && ("true".equalsIgnoreCase(req.getParameter("meus"))))) {
-        	
-            precisaAutenticacao = true;
-        } else if ("/avaliacoes".equals(path) && "POST".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method)) {
-            precisaAutenticacao = true;
-        } else if ("/usuario".equals(path) && ("GET".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method))) {
-            precisaAutenticacao = true;
-        }
+        String authHeader = req.getHeader("Authorization");
 
-        if (precisaAutenticacao) {
-            String authHeader = req.getHeader("Authorization");
+        if (precisaAutenticacao || (aceitaAutenticacaoOpcional && authHeader != null)) {
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 res.setContentType("application/json");

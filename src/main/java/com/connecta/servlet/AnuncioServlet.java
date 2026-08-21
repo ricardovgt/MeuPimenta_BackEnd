@@ -15,14 +15,17 @@ import java.io.IOException;
 import java.util.List;
 
 import com.connecta.dao.AnuncioDAO;
+import com.connecta.dao.AnuncioDAO.ResultadoCadastro;
 import com.connecta.dao.UsuarioDAO;
 import com.connecta.dto.AnuncioCardDTO;
 import com.connecta.dto.AnuncioDetalheDTO;
 import com.connecta.dto.AnuncioRequestDTO;
+import com.connecta.dto.AnunciosPaginadosDTO;
 import com.connecta.dto.MeusAnunciosDTO;
 import com.connecta.entity.Anuncio;
 import com.connecta.entity.Usuario;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 
 import jakarta.servlet.ServletException;
@@ -35,7 +38,9 @@ import jakarta.servlet.http.HttpServletResponse;
 public class AnuncioServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
-    private final Gson gson = new Gson();
+    private static final Gson GSON = new Gson();
+    private static final Gson GSON_COM_NULOS =
+            new GsonBuilder().serializeNulls().create();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
@@ -50,12 +55,11 @@ public class AnuncioServlet extends HttpServlet {
                     int idAnuncio = Integer.parseInt(idParam.trim());
                     int idUsuarioRequisitante = obterIdUsuarioTokenOuPadrao(req, -1);
 
-                    AnuncioDetalheDTO anuncio =
-                            AnuncioDAO.pegarAnuncioDetalhe(idAnuncio, idUsuarioRequisitante);
+                    AnuncioDetalheDTO anuncio = AnuncioDAO.pegarAnuncioDetalhe(idAnuncio, idUsuarioRequisitante);
 
                     if (anuncio != null) {
                         res.setStatus(HttpServletResponse.SC_OK);
-                        res.getWriter().print(gson.toJson(anuncio));
+                        res.getWriter().print(GSON.toJson(anuncio));
                     } else {
                         res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                         res.getWriter().print("{\"erro\": \"Anúncio não encontrado.\"}");
@@ -81,34 +85,62 @@ public class AnuncioServlet extends HttpServlet {
                 List<MeusAnunciosDTO> meusAnuncios = AnuncioDAO.listarPorUsuario(idUsuarioToken);
 
                 res.setStatus(HttpServletResponse.SC_OK);
-                res.getWriter().print(gson.toJson(meusAnuncios));
+                res.getWriter().print(GSON.toJson(meusAnuncios));
                 return;
             }
 
-            // 3. BUSCA GERAL DE ANÚNCIOS
+            // 3. BUSCAR OS TRÊS ANÚNCIOS MAIS BEM AVALIADOS
+            if ("true".equalsIgnoreCase(req.getParameter("destaques"))) {
+                List<AnuncioCardDTO> meusAnuncios = AnuncioDAO.buscarAnunciosDestaque();
+
+                res.setStatus(HttpServletResponse.SC_OK);
+                res.getWriter().print(GSON.toJson(meusAnuncios));
+                return;
+            }
+
+            // 4. BUSCA GERAL DE ANÚNCIOS
             String busca = req.getParameter("busca");
             String topParam = req.getParameter("top");
             String tipoParam = req.getParameter("tipo");
-            boolean topAvaliacoes = "true".equalsIgnoreCase(topParam);
+            Integer pagina = lerParametroPositivo(req.getParameter("pagina"), 1);
+            Integer limite = lerParametroPositivo(req.getParameter("limite"), 12);
+            boolean topValido = topParam == null
+                    || "true".equalsIgnoreCase(topParam.trim())
+                    || "false".equalsIgnoreCase(topParam.trim());
+            boolean topAvaliacoes = topParam != null
+                    && "true".equalsIgnoreCase(topParam.trim());
 
             String tipo = normalizarTipo(tipoParam);
-            if (tipoParam != null && !tipoParam.trim().isEmpty() && tipo == null) {
+            boolean tipoInvalido = tipoParam != null && tipo == null;
+            if (pagina == null || limite == null || limite > 50
+                    || tipoInvalido || !topValido) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print(
-                        "{\"erro\": \"Tipo inválido. Use SERVICO ou COMERCIO.\"}");
+                res.getWriter().print("{\"erro\": \"Parâmetros de paginação inválidos.\"}");
                 return;
             }
 
-            List<AnuncioCardDTO> anuncios =
-                    AnuncioDAO.buscarAnunciosCard(busca, topAvaliacoes, tipo);
+            AnunciosPaginadosDTO anuncios = AnuncioDAO.buscarAnunciosPublicosPaginados(
+                    pagina, limite, busca, tipo, topAvaliacoes);
 
             res.setStatus(HttpServletResponse.SC_OK);
-            res.getWriter().print(gson.toJson(anuncios));
+            res.getWriter().print(GSON_COM_NULOS.toJson(anuncios));
 
         } catch (Exception e) {
             e.printStackTrace();
             res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             res.getWriter().print("{\"erro\": \"Erro interno do servidor ao buscar anúncios.\"}");
+        }
+    }
+
+    private Integer lerParametroPositivo(String valor, int padrao) {
+        if (valor == null) {
+            return padrao;
+        }
+        try {
+            int numero = Integer.parseInt(valor.trim());
+            return numero > 0 ? numero : null;
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
@@ -208,7 +240,7 @@ public class AnuncioServlet extends HttpServlet {
 
             AnuncioRequestDTO dadosRecebidos;
             try {
-                dadosRecebidos = gson.fromJson(corpo, AnuncioRequestDTO.class);
+                dadosRecebidos = GSON.fromJson(corpo, AnuncioRequestDTO.class);
             } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print(
@@ -251,9 +283,16 @@ public class AnuncioServlet extends HttpServlet {
                     descricaoDetalhada != null ? descricaoDetalhada.trim() : "");
             anuncio.setTipo(tipo);
 
-            if (AnuncioDAO.cadastrar(anuncio, dadosRecebidos.getFotos())) {
+            ResultadoCadastro resultadoCadastro =
+                    AnuncioDAO.cadastrar(anuncio, dadosRecebidos.getFotos());
+
+            if (resultadoCadastro == ResultadoCadastro.SUCESSO) {
                 res.setStatus(HttpServletResponse.SC_CREATED);
                 res.getWriter().print("{\"mensagem\": \"Anúncio cadastrado com sucesso!\"}");
+            } else if (resultadoCadastro == ResultadoCadastro.LIMITE_ATINGIDO) {
+                res.setStatus(HttpServletResponse.SC_CONFLICT);
+                res.getWriter().print(
+                        "{\"erro\": \"Cada usuário pode ter no máximo 5 anúncios.\"}");
             } else {
                 res.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
                 res.getWriter().print(
@@ -298,7 +337,7 @@ public class AnuncioServlet extends HttpServlet {
 
             AnuncioRequestDTO dadosRecebidos;
             try {
-                dadosRecebidos = gson.fromJson(corpo, AnuncioRequestDTO.class);
+                dadosRecebidos = GSON.fromJson(corpo, AnuncioRequestDTO.class);
             } catch (Exception e) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print(
@@ -328,6 +367,15 @@ public class AnuncioServlet extends HttpServlet {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print(
                         "{\"erro\": \"Status inválido. O usuário pode usar apenas ATIVO ou OCULTO.\"}");
+                return;
+            }
+
+            if ("ATIVO".equals(novoStatus)
+                    && (usuarioReq.getTipoConta() == null
+                            || !"COMERCIAL".equalsIgnoreCase(usuarioReq.getTipoConta()))) {
+                res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                res.getWriter().print(
+                        "{\"erro\": \"Apenas contas COMERCIAL podem ativar anúncios.\"}");
                 return;
             }
 
@@ -469,7 +517,7 @@ public class AnuncioServlet extends HttpServlet {
             } else {
                 res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 res.getWriter().print(
-                        "{\"erro\": \"Anúncio não encontrado ou você não tem permissão para excluí-lo.\"}");
+                        "{\"erro\": \"Anúncio não encontrado, sem permissão ou banido. Anúncios banidos não podem ser excluídos.\"}");
             }
 
         } catch (Exception e) {

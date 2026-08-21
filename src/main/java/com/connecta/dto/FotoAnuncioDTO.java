@@ -16,8 +16,4 @@ public class FotoAnuncioDTO {
     public String getFotoBase64() { return fotoBase64; }
     public boolean isCapa() { return isCapa; }
 
-    // Setters
-    public void setId(int id) { this.id = id; }
-    public void setFotoBase64(String fotoBase64) { this.fotoBase64 = fotoBase64; }
-    public void setCapa(boolean isCapa) { this.isCapa = isCapa; }
 }
