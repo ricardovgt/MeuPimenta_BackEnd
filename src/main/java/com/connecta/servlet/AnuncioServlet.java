@@ -37,6 +37,8 @@ import jakarta.servlet.http.HttpServletResponse;
 @WebServlet("/anuncios")
 public class AnuncioServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
+    private static final int LIMITE_DESCRICAO = 255;
+    private static final int LIMITE_DESCRICAO_DETALHADA = 2000;
 
     private static final Gson GSON = new Gson();
     private static final Gson GSON_COM_NULOS =
@@ -274,6 +276,21 @@ public class AnuncioServlet extends HttpServlet {
                 return;
             }
 
+            if (descricao != null && descricao.trim().length() > LIMITE_DESCRICAO) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"A descrição deve ter no máximo 255 caracteres.\"}");
+                return;
+            }
+
+            if (descricaoDetalhada != null
+                    && descricaoDetalhada.trim().length() > LIMITE_DESCRICAO_DETALHADA) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"A descrição detalhada deve ter no máximo 2000 caracteres.\"}");
+                return;
+            }
+
             Anuncio anuncio = new Anuncio();
             anuncio.setIdUsuario(idUsuarioToken);
             anuncio.setNome(nome.trim());
@@ -425,6 +442,23 @@ public class AnuncioServlet extends HttpServlet {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 res.getWriter().print(
                         "{\"erro\": \"Tipo inválido. Use SERVICO ou COMERCIO.\"}");
+                return;
+            }
+
+            if (dadosRecebidos.getDescricao() != null
+                    && dadosRecebidos.getDescricao().trim().length() > LIMITE_DESCRICAO) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"A descrição deve ter no máximo 255 caracteres.\"}");
+                return;
+            }
+
+            if (dadosRecebidos.getDescricaoDetalhada() != null
+                    && dadosRecebidos.getDescricaoDetalhada().trim().length()
+                            > LIMITE_DESCRICAO_DETALHADA) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"A descrição detalhada deve ter no máximo 2000 caracteres.\"}");
                 return;
             }
 

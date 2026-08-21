@@ -296,8 +296,18 @@ public class UsuarioServlet extends HttpServlet {
 
                 boolean atualizado = UsuarioDAO.atualizarEmail(idDoToken, emailLimpo);
                 if (atualizado) {
+                    Algorithm algoritmo = Algorithm.HMAC256(com.connecta.conexao.Conexao.JWT_SECRET);
+                    String novoToken = JWT.create()
+                            .withIssuer("connecta-api")
+                            .withClaim("id", idDoToken)
+                            .withClaim("email", emailLimpo)
+                            .withExpiresAt(new Date(System.currentTimeMillis() + 2629800000L))
+                            .sign(algoritmo);
+
                     res.setStatus(HttpServletResponse.SC_OK);
-                    res.getWriter().print("{\"mensagem\": \"E-mail atualizado com sucesso!\"}");
+                    res.getWriter().print(
+                            "{\"mensagem\": \"E-mail atualizado com sucesso!\", \"token\": \""
+                            + novoToken + "\"}");
                     return;
                 }
             }

@@ -33,6 +33,7 @@ public class AvaliacaoServlet extends HttpServlet {
 
     private static final int LIMITE_PADRAO = 10;
     private static final int PAGINA_PADRAO = 1;
+    private static final int LIMITE_COMENTARIO = 1000;
 
     private static final Gson GSON = new Gson();
 
@@ -156,9 +157,10 @@ public class AvaliacaoServlet extends HttpServlet {
                 return;
             }
 
-            if (!Double.isFinite(nota) || nota < 1 || nota > 5) {
+            if (!Double.isFinite(nota) || nota < 1 || nota > 5 || nota != Math.rint(nota)) {
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                res.getWriter().print("{\"erro\": \"A nota deve ser entre 1 e 5.\"}");
+                res.getWriter().print(
+                        "{\"erro\": \"A nota deve ser um número inteiro entre 1 e 5.\"}");
                 return;
             }
 
@@ -166,6 +168,13 @@ public class AvaliacaoServlet extends HttpServlet {
                     (comentarioParam == null || comentarioParam.trim().isEmpty())
                             ? null
                             : comentarioParam.trim();
+
+            if (comentario != null && comentario.length() > LIMITE_COMENTARIO) {
+                res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                res.getWriter().print(
+                        "{\"erro\": \"O comentário deve ter no máximo 1000 caracteres.\"}");
+                return;
+            }
 
             AnuncioDetalheDTO anuncio =
                     AnuncioDAO.pegarAnuncioDetalhe(idAnuncio, idUsuarioToken);
